@@ -52,11 +52,28 @@ function requireApiKey(req, res, next) {
     next();
 }
 
+// basic auth for frontend
+function basicAuth(req, res, next) {
+    if (!process.env.ERP_AUTH_USER || !process.env.ERP_AUTH_PASS) return next(); // désactivé si non configuré
+  
+    const b64auth = (req.headers.authorization || '').split(' ')[1] || '';
+    const [user, pass] = Buffer.from(b64auth, 'base64').toString().split(':');
+  
+    if (user === process.env.ERP_AUTH_USER && pass === process.env.ERP_AUTH_PASS) return next();
+  
+    res.set('WWW-Authenticate', 'Basic realm="FreelanceERP"');
+    return res.status(401).send('Authentication required.');
+  }
+
+  
 async function main() {
     const app = express();
     const port = process.env.PORT || 3001;
     const dbFile = process.env.DB_FILE || './data.sqlite';
     const db = await initDb(dbFile);
+
+    // basic auth for frontend
+    app.use(basicAuth);
 
     app.use(cors(buildCorsOptions()));
     app.use(express.json({ limit: '2mb' }));
