@@ -3,6 +3,9 @@ import express from 'express';
 import cors from 'cors';
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
+// for serving frontend
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 // Open sqlite with promise API
 async function initDb(dbFile) {
@@ -86,6 +89,17 @@ async function main() {
         } catch (e) {
             res.status(500).json({ error: 'Database error' });
         }
+    });
+
+     // serve frontend files
+     const __filename = fileURLToPath(import.meta.url);
+     const __dirname = path.dirname(__filename);
+
+     app.use(express.static(path.join(__dirname, 'frontend')));
+   
+    // fallback to index.html (pour single-page app)
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(__dirname, 'frontend', 'index.html'));
     });
 
     app.listen(port, () => {

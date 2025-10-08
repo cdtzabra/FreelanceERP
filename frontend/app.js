@@ -332,7 +332,13 @@ class FreelanceERP {
             if (raw) {
                 const cfg = JSON.parse(raw);
                 this.backend = { url: cfg.url || '', apiKey: cfg.apiKey || '' };
-            }
+            }else{
+            // fallback auto quand aucune config stockée
+            this.backend = {
+                url: window.location.origin,  // auto-détection backend = même domaine
+                apiKey: ''
+            };
+        }
         } catch (_) { /* ignore */ }
     }
 
