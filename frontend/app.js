@@ -27,11 +27,9 @@ class FreelanceERP {
         // Prevent remote sync during initial boot until we've tried pulling remote data
         this.suppressRemoteSync = true;
         this.loadBackendConfig();
-        this.loadData();
         this.loadCompanyConfig();
         this.initializeEventListeners();
         this.showPage('dashboard');
-        this.updateDashboard();
 
         // Import/Export handlers
         this.$('#btn-export').onclick = () => this.onExport();
@@ -42,19 +40,26 @@ class FreelanceERP {
         const backendBtn = this.$('#btn-backend-config');
         const syncBtn = this.$('#btn-sync');
         if (backendBtn) backendBtn.onclick = () => this.configureBackend();
-        if (syncBtn) syncBtn.onclick = () => this.syncSaveToServer();
+        if (syncBtn) syncBtn.onclick = () => this.syncLoadFromServer();
         const companyBtn = this.$('#btn-company');
         if (companyBtn) companyBtn.onclick = () => this.showCompanyForm();
 
-        // Auto-load from backend if configured, then re-enable remote sync
+        // CORRECTION: Auto-load from backend if configured
         if (this.backend.url && this.backend.apiKey) {
-            this.syncLoadFromServer().finally(() => {
+            this.syncLoadFromServer().then(() => {
+                this.updateDashboard();
+            }).finally(() => {
                 this.suppressRemoteSync = false;
             });
         } else {
+            // No backend configured - just update dashboard with empty data
+            this.updateDashboard();
             this.suppressRemoteSync = false;
         }
     }
+    // INIT end
+
+
 
     $(selector) {
         return document.querySelector(selector);
@@ -248,39 +253,36 @@ class FreelanceERP {
     /* -------------------------
     Chargement des Données (depuis SQLite)
     ------------------------- */
-    async loadData() {
-        if (!this.backend.url || !this.backend.apiKey) {
-            this.showToast('Veuillez configurer le backend avant de continuer.', 'error');
-            this.showPage('dashboard');
-            return;
-        }
+    // async loadData() {
+    //     if (!this.backend.url || !this.backend.apiKey) {
+    //         this.showToast('Veuillez configurer le backend avant de continuer.', 'error');
+    //         this.showPage('dashboard');
+    //         return;
+    //     }
 
-        try {
-            await this.syncLoadFromServer();
-            this.showToast('Données chargées depuis le serveur', 'success');
-        } catch (e) {
-            console.error('Erreur de chargement serveur:', e);
-            this.showToast('Erreur lors du chargement des données serveur', 'error');
-        }
-    }
+    //     try {
+    //         await this.syncLoadFromServer();
+    //         this.showToast('Données chargées depuis le serveur', 'success');
+    //     } catch (e) {
+    //         console.error('Erreur de chargement serveur:', e);
+    //         this.showToast('Erreur lors du chargement des données serveur', 'error');
+    //     }
+    // }
 
     /* -------------------------
-    Sauvegarde des Données (dans SQLite)
+    Save Data in SQLite
     ------------------------- */
     async saveData() {
         if (!this.backend.url || !this.backend.apiKey) {
-            this.showToast('Backend non configuré — impossible de sauvegarder', 'error');
             return;
         }
 
         try {
             if (!this.suppressRemoteSync) {
                 await this.syncSaveToServerSilent();
-                this.showToast('Données sauvegardées sur le serveur', 'success');
             }
         } catch (e) {
             console.error('Erreur de sauvegarde serveur:', e);
-            this.showToast('Erreur lors de la sauvegarde serveur', 'error');
         }
     }
 
@@ -320,7 +322,7 @@ class FreelanceERP {
     }
 
     configureBackend() {
-        const currentUrl = this.backend.url || '';
+        const currentUrl = this.backend.url || window.location.origin;
         const url = prompt('Backend URL (ex: http://localhost:3001)', currentUrl);
         if (url === null) return;
         const trimmed = (url || '').trim();
@@ -331,9 +333,20 @@ class FreelanceERP {
         const currentKey = this.backend.apiKey || '';
         const apiKey = prompt('API Key (x-api-key)', currentKey);
         if (apiKey === null) return;
+        
         this.backend = { url: trimmed.replace(/\/$/, ''), apiKey: (apiKey || '').trim() };
         this.saveBackendConfig();
-        this.showToast('Configuration backend enregistrée', 'success');
+        
+        // CORRECTION: Charger immédiatement les données après configuration
+        if (this.backend.url && this.backend.apiKey) {
+            this.syncLoadFromServer().then(() => {
+                this.showToast('Configuration backend enregistrée et données chargées', 'success');
+            }).catch(() => {
+                this.showToast('Configuration enregistrée mais échec du chargement des données', 'warning');
+            });
+        } else {
+            this.showToast('Configuration backend enregistrée', 'success');
+        }
     }
 
     showCompanyForm() {
@@ -388,7 +401,10 @@ class FreelanceERP {
     }
 
     async syncLoadFromServer() {
-        if (!this.backend.url || !this.backend.apiKey) return;
+        if (!this.backend.url || !this.backend.apiKey) {
+            this.showToast('Backend non configuré', 'error');
+            return;
+        }
         try {
             const res = await fetch(`${this.backend.url}/api/data`, {
                 method: 'GET',
@@ -400,15 +416,13 @@ class FreelanceERP {
                 // Ensure cras exists
                 if (!payload.data.cras) payload.data.cras = [];
                 this.data = payload.data;
-                const prev = this.suppressRemoteSync;
-                this.suppressRemoteSync = true; // avoid pushing back what we just pulled
-                this.saveData(); // persist locally only
-                this.suppressRemoteSync = prev;
+                // CORRECTION: Mettre à jour immédiatement l'affichage
                 this.updateDashboard();
                 this.showPage(this.currentPage);
                 this.showToast('Données chargées depuis le serveur', 'success');
             }
         } catch (e) {
+            console.error('Erreur de chargement:', e);
             this.showToast('Échec du chargement serveur', 'error');
         }
     }
