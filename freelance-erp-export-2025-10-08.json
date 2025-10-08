@@ -1,0 +1,61 @@
+{
+  "exportDate": "2025-10-08T12:11:05.623Z",
+  "version": "1.0",
+  "data": {
+    "clients": [
+      {
+        "id": 1,
+        "siren": "123456789",
+        "company": "TechCorp SAS",
+        "address": "15 rue de la Innovation\n75001 Paris",
+        "contact": {
+          "name": "Marie Dupont",
+          "email": "marie.dupont@techcorp.fr",
+          "phone": "01 23 45 67 89"
+        },
+        "billingAddress": "15 rue de la Innovation\n75001 Paris",
+        "createdAt": "2024-01-15"
+      }
+    ],
+    "missions": [
+      {
+        "id": 1,
+        "title": "Audit Sécurité Kubernetes",
+        "description": "Audit complet de la sécurité des clusters Kubernetes en production",
+        "clientId": 1,
+        "startDate": "2024-09-01",
+        "endDate": "2024-09-15",
+        "dailyRate": 650,
+        "status": "En cours",
+        "createdAt": "2024-08-20"
+      }
+    ],
+    "invoices": [
+      {
+        "id": 1,
+        "number": "FACT-2024-001",
+        "date": "2024-07-31",
+        "clientId": 1,
+        "missionId": 1,
+        "amount": 14000,
+        "vatRate": 20,
+        "status": "Payée",
+        "dueDate": "2024-08-30",
+        "createdAt": "2024-07-31"
+      },
+      {
+        "id": 2,
+        "number": "FACT-2024-002",
+        "date": "2024-09-15",
+        "clientId": 1,
+        "missionId": 1,
+        "amount": 6500,
+        "vatRate": 20,
+        "status": "Envoyée",
+        "dueDate": "2024-10-15",
+        "createdAt": "2024-09-15"
+      }
+    ],
+    "cras": []
+  }
+}

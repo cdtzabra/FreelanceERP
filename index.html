@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FreelanceERP - Gestion d'entreprise pour freelancers</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Navigation -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h2><i class="fas fa-briefcase"></i> FreelanceERP</h2>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="#" data-page="dashboard" class="nav-link active"><i class="fas fa-tachometer-alt"></i> Tableau de bord</a></li>
+                <li><a href="#" data-page="clients" class="nav-link"><i class="fas fa-users"></i> Clients</a></li>
+                <li><a href="#" data-page="missions" class="nav-link"><i class="fas fa-tasks"></i> Missions</a></li>
+                <li><a href="#" data-page="cra" class="nav-link"><i class="fas fa-calendar-check"></i> CRA</a></li>
+                <li><a href="#" data-page="invoices" class="nav-link"><i class="fas fa-file-invoice"></i> Factures</a></li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="header">
+                <div class="header-content">
+                    <h1 id="page-title">Tableau de bord</h1>
+                    <div class="header-actions">
+                        <div class="search-box">
+                            <i class="fas fa-search"></i>
+                            <input type="text" id="global-search" placeholder="Rechercher...">
+                        </div>
+                        <button class="btn btn--primary" id="quick-action-btn">
+                            <i class="fas fa-plus"></i> Nouveau
+                        </button>
+                        <div class="header-actions">
+                            <button id="btn-export" class="btn">Export</button>
+                            <button id="btn-import" class="btn">Import</button>
+                            <input id="file-input" type="file" accept=".json,.xlsx,.xls,.csv" style="display:none" />
+                            <button id="btn-backend-config" class="btn">Backend</button>
+                            <button id="btn-sync" class="btn btn--secondary">Sync</button>
+                            <button id="btn-company" class="btn">Société</button>
+                        </div>
+                    </div>
+                    <div id="company-header" class="company-header"></div>
+                </div>
+            </header>
+
+            <!-- Dashboard Page -->
+            <div id="dashboard-page" class="page active">
+                <div class="dashboard-grid">
+                    <div class="dashboard-stats">
+                        <div class="stat-card">
+                            <div class="stat-icon bg-green">
+                                <i class="fas fa-euro-sign"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="total-revenue">0 €</h3>
+                                <p>CA Encaissé / Payé</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-orange">
+                                <i class="fas fa-euro-sign"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="pending-revenue">0 €</h3>
+                                <p>CA En Attente</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-blue">
+                                <i class="fas fa-euro-sign"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="generated-revenue">0 €</h3>
+                                <p>Chiffre d'affaires Total</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-green">
+                                <i class="fas fa-tasks"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="active-missions">0</h3>
+                                <p>Missions en cours</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-orange">
+                                <i class="fas fa-file-invoice"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="pending-invoices">0</h3>
+                                <p>Factures impayées</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-purple">
+                                <i class="fas fa-users"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="total-clients">0</h3>
+                                <p>Clients actifs</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="dashboard-content">
+                        <div class="dashboard-section">
+                            <h3>Missions récentes</h3>
+                            <div id="recent-missions" class="mission-list"></div>
+                        </div>
+                        
+                        <div class="dashboard-section">
+                            <h3>Factures en attente</h3>
+                            <div id="pending-invoices-list" class="invoice-list"></div>
+                        </div>
+
+
+                        <div class="dashboard-section">
+                            <h3>Chiffre généré par mois (CRA)</h3>
+                            <canvas id="chart-generated" height="120"></canvas>
+                            <div class="table-container">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Mois</th>
+                                            <th>Jours travaillés</th>
+                                            <th>Montant HT</th>
+                                            <th>TVA</th>
+                                            <th>Total TTC</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="generated-revenue-body"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        
+
+                        <div class="dashboard-section">
+                            <h3>Chiffre encaissé par mois (Paiements)</h3>
+                            <canvas id="chart-paid" height="120"></canvas>
+                            <div class="table-container">
+                                <table class="data-table">
+                        <div class="dashboard-section">
+                            <h3>Chiffre d'affaires total par mois</h3>
+                            <canvas id="chart-total" height="120"></canvas>
+                        </div>
+                                    <thead>
+                                        <tr>
+                                            <th>Mois</th>
+                                            <th>Montant HT</th>
+                                            <th>TVA</th>
+                                            <th>Total TTC</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="paid-revenue-body"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="dashboard-section">
+                            <h3>Informations Société</h3>
+                            <div id="company-card" class="company-card"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Clients Page -->
+            <div id="clients-page" class="page">
+                <div class="page-header">
+                    <div class="page-actions">
+                        <button class="btn btn--primary" id="add-client-btn">
+                            <i class="fas fa-plus"></i> Nouveau client
+                        </button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Société</th>
+                                <th>SIREN</th>
+                                <th>Contact</th>
+                                <th>Email</th>
+                                <th>Email facturation</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="clients-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Missions Page -->
+            <div id="missions-page" class="page">
+                <div class="page-header">
+                    <div class="page-filters">
+                        <select id="mission-status-filter" class="form-control">
+                            <option value="">Tous les statuts</option>
+                            <option value="En attente">En attente</option>
+                            <option value="En cours">En cours</option>
+                            <option value="Terminée">Terminée</option>
+                            <option value="Facturée">Facturée</option>
+                        </select>
+                        <select id="mission-client-filter" class="form-control">
+                            <option value="">Tous les clients</option>
+                        </select>
+                    </div>
+                    <div class="page-actions">
+                        <button class="btn btn--primary" id="add-mission-btn">
+                            <i class="fas fa-plus"></i> Nouvelle mission
+                        </button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Titre</th>
+                                <th>Description</th>
+                                <th>Client</th>
+                                <th>Période</th>
+                                <th>TJM</th>
+                                <th>Statut</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="missions-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- CRA Page -->
+            <div id="cra-page" class="page">
+                <div class="page-header">
+                    <div class="page-filters">
+                        <select id="cra-month-filter" class="form-control">
+                            <option value="">Tous les mois</option>
+                        </select>
+                    </div>
+                    <div class="page-actions">
+                        <button class="btn btn--primary" id="add-cra-btn">
+                            <i class="fas fa-plus"></i> Nouveau CRA
+                        </button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Mission</th>
+                                <th>Client</th>
+                                <th>Jours travaillés</th>
+                                <th>Montant</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cra-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Invoices Page -->
+            <div id="invoices-page" class="page">
+                <div class="page-header">
+                    <div class="page-filters">
+                        <select id="invoice-status-filter" class="form-control">
+                            <option value="">Tous les statuts</option>
+                            <option value="Brouillon">Brouillon</option>
+                            <option value="Envoyée">Envoyée</option>
+                            <option value="Payée">Payée</option>
+                            <option value="En retard">En retard</option>
+                        </select>
+                    </div>
+                    <div class="page-actions">
+                        <button class="btn btn--primary" id="add-invoice-btn">
+                            <i class="fas fa-plus"></i> Nouvelle facture
+                        </button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Numéro</th>
+                                <th>Date</th>
+                                <th>Client</th>
+                                <th>Mission</th>
+                                <th>Montant TTC</th>
+                                <th>Statut</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="invoices-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal for forms -->
+    <div id="modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">Titre</h3>
+                <button class="modal-close" id="modal-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <!-- Dynamic content -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn--secondary" id="modal-cancel">Annuler</button>
+                <button class="btn btn--primary" id="modal-save">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="app.js"></script>
+
+</body>
+</html>

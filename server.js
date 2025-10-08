@@ -1,0 +1,101 @@
+import 'dotenv/config';
+import express from 'express';
+import cors from 'cors';
+import sqlite3 from 'sqlite3';
+import { open } from 'sqlite';
+
+// Open sqlite with promise API
+async function initDb(dbFile) {
+    const db = await open({ filename: dbFile, driver: sqlite3.Database });
+    await db.exec(`CREATE TABLE IF NOT EXISTS data_store (
+        api_key TEXT PRIMARY KEY,
+        payload TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )`);
+    return db;
+}
+
+function buildCorsOptions() {
+    const allowed = process.env.ALLOWED_ORIGINS?.split(',').map(s => s.trim()).filter(Boolean) || ['*'];
+    if (allowed.includes('*')) {
+        return { origin: true, credentials: false };
+    }
+    return {
+        origin: function(origin, callback) {
+            if (!origin) return callback(null, true);
+            if (allowed.includes(origin)) return callback(null, true);
+            return callback(new Error('Not allowed by CORS'));
+        },
+        credentials: false
+    };
+}
+
+function requireApiKey(req, res, next) {
+    const apiKey = req.header('x-api-key');
+    if (!apiKey) return res.status(401).json({ error: 'Missing x-api-key header' });
+    req.apiKey = apiKey;
+    next();
+}
+
+async function main() {
+    const app = express();
+    const port = process.env.PORT || 3001;
+    const dbFile = process.env.DB_FILE || './data.sqlite';
+    const db = await initDb(dbFile);
+
+    app.use(cors(buildCorsOptions()));
+    app.use(express.json({ limit: '2mb' }));
+
+    app.get('/health', (req, res) => {
+        res.json({ ok: true, now: new Date().toISOString() });
+    });
+
+    // Fetch current dataset
+    app.get('/api/data', requireApiKey, async (req, res) => {
+        try {
+            const row = await db.get('SELECT payload, updated_at FROM data_store WHERE api_key = ?', req.apiKey);
+            if (!row) return res.json({ data: { clients: [], missions: [], invoices: [], cras: [] }, updatedAt: null });
+            let payload;
+            try {
+                payload = JSON.parse(row.payload);
+            } catch (_) {
+                payload = { clients: [], missions: [], invoices: [], cras: [] };
+            }
+            res.json({ data: payload, updatedAt: row.updated_at });
+        } catch (e) {
+            res.status(500).json({ error: 'Database error' });
+        }
+    });
+
+    // Replace dataset
+    app.put('/api/data', requireApiKey, async (req, res) => {
+        try {
+            const payload = req.body?.data;
+            if (!payload || typeof payload !== 'object') {
+                return res.status(400).json({ error: 'Body must be { data: {...} }' });
+            }
+            const json = JSON.stringify(payload);
+            const now = new Date().toISOString();
+            await db.run(
+                'INSERT INTO data_store(api_key, payload, updated_at) VALUES (?, ?, ?) ON CONFLICT(api_key) DO UPDATE SET payload=excluded.payload, updated_at=excluded.updated_at',
+                req.apiKey,
+                json,
+                now
+            );
+            res.json({ ok: true, updatedAt: now });
+        } catch (e) {
+            res.status(500).json({ error: 'Database error' });
+        }
+    });
+
+    app.listen(port, () => {
+        console.log(`FreelanceERP backend listening on http://localhost:${port}`);
+    });
+}
+
+main().catch(err => {
+    console.error('Fatal error during startup', err);
+    process.exit(1);
+});
+
+
