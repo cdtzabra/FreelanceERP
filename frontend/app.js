@@ -6,19 +6,19 @@ class FreelanceERP {
             clients: [],
             missions: [],
             invoices: [],
-            cras: []
+            cras: [],
+            company: {  // <-- AJOUT
+                name: '',
+                address: '',
+                phone: '',
+                email: '',
+                siret: '',
+                tva_value: '',
+                nda: '',
+                iban: ''
+            }
         };
         this.backend = { url: '', apiKey: '' };
-        this.company = {
-            name: '',
-            address: '',
-            phone: '',
-            email: '',
-            siret: '',
-            tva_value: '',
-            nda: '',
-            iban: ''
-        };
         this.suppressRemoteSync = false;
         this.init();
     }
@@ -27,7 +27,7 @@ class FreelanceERP {
         // Prevent remote sync during initial boot until we've tried pulling remote data
         this.suppressRemoteSync = true;
         this.loadBackendConfig();
-        this.loadCompanyConfig();
+        // this.loadCompanyConfig();
         this.initializeEventListeners();
         this.showPage('dashboard');
 
@@ -63,6 +63,14 @@ class FreelanceERP {
 
     $(selector) {
         return document.querySelector(selector);
+    }
+
+    get company() {
+        return this.data.company;
+    }
+
+    set company(value) {
+        this.data.company = value;
     }
 
     onExport() {
@@ -250,24 +258,6 @@ class FreelanceERP {
         }
     }
 
-    /* -------------------------
-    Chargement des Données (depuis SQLite)
-    ------------------------- */
-    // async loadData() {
-    //     if (!this.backend.url || !this.backend.apiKey) {
-    //         this.showToast('Veuillez configurer le backend avant de continuer.', 'error');
-    //         this.showPage('dashboard');
-    //         return;
-    //     }
-
-    //     try {
-    //         await this.syncLoadFromServer();
-    //         this.showToast('Données chargées depuis le serveur', 'success');
-    //     } catch (e) {
-    //         console.error('Erreur de chargement serveur:', e);
-    //         this.showToast('Erreur lors du chargement des données serveur', 'error');
-    //     }
-    // }
 
     /* -------------------------
     Save Data in SQLite
@@ -286,22 +276,22 @@ class FreelanceERP {
         }
     }
 
-    loadCompanyConfig() {
-        try {
-            const raw = localStorage.getItem('freelanceERPCompany');
-            if (raw) {
-                const v = JSON.parse(raw);
-                this.company = { ...this.company, ...v };
-            }
-        } catch (_) { /* ignore */ }
-    }
+    // loadCompanyConfig() {
+    //     try {
+    //         const raw = localStorage.getItem('freelanceERPCompany');
+    //         if (raw) {
+    //             const v = JSON.parse(raw);
+    //             this.company = { ...this.company, ...v };
+    //         }
+    //     } catch (_) { /* ignore */ }
+    // }
 
-    saveCompanyConfig() {
-        localStorage.setItem('freelanceERPCompany', JSON.stringify(this.company));
-        this.renderCompanyInfo();
-        this.renderCompanyHeader();
-        this.renderCharts();
-    }
+    // saveCompanyConfig() {
+    //     localStorage.setItem('freelanceERPCompany', JSON.stringify(this.company));
+    //     this.renderCompanyInfo();
+    //     this.renderCompanyHeader();
+    //     this.renderCharts();
+    // }
 
     loadBackendConfig() {
         try {
@@ -418,6 +408,7 @@ class FreelanceERP {
                 this.data = payload.data;
                 // CORRECTION: Mettre à jour immédiatement l'affichage
                 this.updateDashboard();
+                this.renderCharts();
                 this.showPage(this.currentPage);
                 this.showToast('Données chargées depuis le serveur', 'success');
             }
@@ -587,27 +578,38 @@ class FreelanceERP {
         this.renderGeneratedRevenueByMonth();
         this.renderPaidRevenueByMonth();
         this.renderCompanyInfo();
+        this.renderCharts();
     }
 
     renderCompanyInfo() {
-        const el = document.getElementById('company-info');
+        const el = document.getElementById('company-card');
         if (!el) return;
         const c = this.company || {};
-        const lines = [
-            c.name,
-            c.address,
-            c.phone,
-            c.email,
-            c.siret,
-            c.tva_value,
-            c.nda,
-            c.iban
-        ].filter(Boolean);
-        el.innerHTML = lines.length ? `<pre>${lines.join('\n')}</pre>` : '<p>Aucune information société. Cliquez sur "Société" pour configurer.</p>';
+        
+        // const hasData = c.name || c.address || c.phone || c.email || c.siret || c.tva_value || c.nda || c.iban;
+        
+        if (!c.name) {
+            el.innerHTML = '<p style="color: var(--color-text-secondary);">Aucune information société. Cliquez sur "Société" pour configurer.</p>';
+            return;
+        }
+    
+        el.innerHTML = `
+            <div class="grid">
+                ${c.name ? `<div class="item"><label>Nom</label><div>${c.name}</div></div>` : ''}
+                ${c.siret ? `<div class="item"><label>SIRET</label><div>${c.siret}</div></div>` : ''}
+                ${c.email ? `<div class="item"><label>Email</label><div>${c.email}</div></div>` : ''}
+                ${c.phone ? `<div class="item"><label>Téléphone</label><div>${c.phone}</div></div>` : ''}
+                ${c.tva_value ? `<div class="item"><label>TVA</label><div>${c.tva_value}</div></div>` : ''}
+                ${c.nda ? `<div class="item"><label>NDA</label><div>${c.nda}</div></div>` : ''}
+                ${c.iban ? `<div class="item"><label>IBAN</label><div>${c.iban}</div></div>` : ''}
+                ${c.address ? `<div class="item" style="grid-column: 1 / -1;"><label>Adresse</label><div>${c.address.replace(/\n/g, '<br>')}</div></div>` : ''}
+            </div>
+        `;
     }
 
     renderCompanyHeader() {
-        const el = document.getElementById('company-header');
+        //const el = document.getElementById('company-header');
+        const el = document.getElementById('company-card');
         if (!el) return;
         const c = this.company || {};
         if (!c.name && !c.address && !c.iban) {
@@ -1747,7 +1749,11 @@ printInvoice(id) {
             nda: document.getElementById('comp-nda').value,
             iban: document.getElementById('comp-iban').value
         };
-        this.saveCompanyConfig();
+        // CORRECTION: Sauvegarder dans SQLite via saveData()
+        this.saveData();
+        // CORRECTION: Mettre à jour tous les affichages
+        this.renderCompanyInfo();
+        this.renderCompanyHeader();
         this.closeModal();
         this.showToast('Informations société enregistrées', 'success');
     }
