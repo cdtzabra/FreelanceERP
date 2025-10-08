@@ -245,42 +245,67 @@ class FreelanceERP {
         }
     }
 
-    /* -------------------------
-    Chargement des Données (depuis SQLite)
-    ------------------------- */
-    async loadData() {
-        if (!this.backend.url || !this.backend.apiKey) {
-            this.showToast('Veuillez configurer le backend avant de continuer.', 'error');
-            this.showPage('dashboard');
-            return;
-        }
-
-        try {
-            await this.syncLoadFromServer();
-            this.showToast('Données chargées depuis le serveur', 'success');
-        } catch (e) {
-            console.error('Erreur de chargement serveur:', e);
-            this.showToast('Erreur lors du chargement des données serveur', 'error');
+    loadData() {
+        const savedData = localStorage.getItem('freelanceERPData');
+        if (savedData) {
+            this.data = JSON.parse(savedData);
+            if (!this.data.cras) {
+                this.data.cras = [];
+            }
+        } else {
+            this.data = {
+                clients: [
+                    {
+                        id: 1,
+                        siren: "123456789",
+                        company: "TechCorp SAS",
+                        address: "15 rue de la Innovation\n75001 Paris",
+                        contact: {
+                            name: "Marie Dupont",
+                            email: "marie.dupont@techcorp.fr",
+                            phone: "01 23 45 67 89"
+                        },
+                        billingAddress: "15 rue de la Innovation\n75001 Paris",
+                        createdAt: "2024-01-15"
+                    }
+                ],
+                missions: [
+                    {
+                        id: 1,
+                        title: "Audit Sécurité Kubernetes",
+                        description: "Audit complet de la sécurité des clusters Kubernetes en production",
+                        clientId: 1,
+                        startDate: "2024-09-01",
+                        endDate: "2024-09-15",
+                        dailyRate: 650,
+                        status: "En cours",
+                        createdAt: "2024-08-20"
+                    }
+                ],
+                invoices: [
+                    {
+                        id: 1,
+                        number: "FACT-2024-001",
+                        date: "2024-07-31",
+                        clientId: 1,
+                        missionId: 1,
+                        amount: 14000,
+                        vatRate: 20,
+                        status: "Payée",
+                        dueDate: "2024-08-30",
+                        createdAt: "2024-07-31"
+                    }
+                ],
+                cras: []
+            };
+            this.saveData();
         }
     }
 
-    /* -------------------------
-    Sauvegarde des Données (dans SQLite)
-    ------------------------- */
-    async saveData() {
-        if (!this.backend.url || !this.backend.apiKey) {
-            this.showToast('Backend non configuré — impossible de sauvegarder', 'error');
-            return;
-        }
-
-        try {
-            if (!this.suppressRemoteSync) {
-                await this.syncSaveToServerSilent();
-                this.showToast('Données sauvegardées sur le serveur', 'success');
-            }
-        } catch (e) {
-            console.error('Erreur de sauvegarde serveur:', e);
-            this.showToast('Erreur lors de la sauvegarde serveur', 'error');
+    saveData() {
+        localStorage.setItem('freelanceERPData', JSON.stringify(this.data));
+        if (!this.suppressRemoteSync) {
+            this.syncSaveToServerSilent();
         }
     }
 
@@ -307,12 +332,14 @@ class FreelanceERP {
             if (raw) {
                 const cfg = JSON.parse(raw);
                 this.backend = { url: cfg.url || '', apiKey: cfg.apiKey || '' };
-            } else {
-                this.backend = { url: window.location.origin, apiKey: '' };
-            }
-        } catch (_) {
-            this.backend = { url: window.location.origin, apiKey: '' };
+            }else{
+            // fallback auto quand aucune config stockée
+            this.backend = {
+                url: window.location.origin,  // auto-détection backend = même domaine
+                apiKey: ''
+            };
         }
+        } catch (_) { /* ignore */ }
     }
 
     saveBackendConfig() {
