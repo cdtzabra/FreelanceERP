@@ -1,3 +1,2 @@
-data.sqlite
-package-lock.json
-node_modules/
+bak_*
+*/bak_*
