@@ -1758,36 +1758,89 @@ printInvoice(id) {
         this.showToast('Informations société enregistrées', 'success');
     }
 
-    handleGlobalSearch(query) {
-        if (!query.trim()) return;
+    // handleGlobalSearch(query) {
+    //     if (!query.trim()) return;
 
-        const results = [];
+    //     const results = [];
         
-        this.data.clients.forEach(client => {
-            if (client.company.toLowerCase().includes(query.toLowerCase()) ||
-                client.contact.name.toLowerCase().includes(query.toLowerCase()) ||
-                client.siren.includes(query)) {
-                results.push({ type: 'client', item: client });
-            }
-        });
+    //     this.data.clients.forEach(client => {
+    //         if (client.company.toLowerCase().includes(query.toLowerCase()) ||
+    //             client.contact.name.toLowerCase().includes(query.toLowerCase()) ||
+    //             client.siren.includes(query)) {
+    //             results.push({ type: 'client', item: client });
+    //         }
+    //     });
 
-        this.data.missions.forEach(mission => {
-            if (mission.title.toLowerCase().includes(query.toLowerCase()) ||
-                mission.description.toLowerCase().includes(query.toLowerCase())) {
-                results.push({ type: 'mission', item: mission });
-            }
-        });
+    //     this.data.missions.forEach(mission => {
+    //         if (mission.title.toLowerCase().includes(query.toLowerCase()) ||
+    //             mission.description.toLowerCase().includes(query.toLowerCase())) {
+    //             results.push({ type: 'mission', item: mission });
+    //         }
+    //     });
 
-        this.data.invoices.forEach(invoice => {
-            if (invoice.number.toLowerCase().includes(query.toLowerCase())) {
-                results.push({ type: 'invoice', item: invoice });
-            }
-        });
+    //     this.data.invoices.forEach(invoice => {
+    //         if (invoice.number.toLowerCase().includes(query.toLowerCase())) {
+    //             results.push({ type: 'invoice', item: invoice });
+    //         }
+    //     });
 
-        if (results.length > 0) {
-            this.showToast(`${results.length} résultat(s) trouvé(s)`, 'info');
+    //     if (results.length > 0) {
+    //         this.showToast(`${results.length} résultat(s) trouvé(s)`, 'info');
+    //     }
+    // }
+
+    handleGlobalSearch(query) {
+        query = query.trim().toLowerCase();
+        if (!query) {
+            // Si champ vidé → recharger la page courante complète
+            this.showPage(this.currentPage);
+            return;
+        }
+    
+        // Sélecteur de la table selon la page active
+        let rows;
+        switch (this.currentPage) {
+            case 'clients':
+                rows = document.querySelectorAll('#clients-table-body tr');
+                break;
+            case 'missions':
+                rows = document.querySelectorAll('#missions-table-body tr');
+                break;
+            case 'invoices':
+                rows = document.querySelectorAll('#invoices-table-body tr');
+                break;
+            case 'cra':
+                rows = document.querySelectorAll('#cra-table-body tr');
+                break;
+            default:
+                return;
+        }
+    
+        let visibleCount = 0;
+        rows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            const match = text.includes(query);
+            row.style.display = match ? '' : 'none';
+            if (match) visibleCount++;
+        });
+    
+        // plus de toast : affichage direct dans l'UI
+        const table = rows[0]?.closest('table');
+        if (table) {
+            const oldInfo = table.parentElement.querySelector('.search-info');
+            if (oldInfo) oldInfo.remove();
+            const info = document.createElement('div');
+            info.className = 'search-info';
+            info.style.fontSize = '12px';
+            info.style.color = 'var(--color-text-secondary)';
+            info.style.marginTop = '4px';
+            info.textContent = visibleCount > 0
+                ? `${visibleCount} ligne(s) affichée(s)`
+                : 'Aucun résultat';
+            table.parentElement.appendChild(info);
         }
     }
+    
 
     getStatusClass(status) {
         switch (status) {
