@@ -340,136 +340,150 @@ class FreelanceERP {
         }
         const currentKey = this.backend.apiKey || '';
         const apiKey = prompt('API Key (x-api-key)', currentKey);
-                    const invoice = this.data.invoices.find(i => i.id === id);
-                    if (!invoice) {
-                            this.showToast('Facture introuvable', 'error');
-                            return;
-                    }
+        if (apiKey === null) return;
+        
+        this.backend = { url: trimmed.replace(/\/$/, ''), apiKey: (apiKey || '').trim() };
+        this.saveBackendConfig();
+        
+        // CORRECTION: Charger immédiatement les données après configuration
+        if (this.backend.url && this.backend.apiKey) {
+            this.syncLoadFromServer().then(() => {
+                this.showToast('Configuration backend enregistrée et données chargées', 'success');
+            }).catch(() => {
+                this.showToast('Configuration enregistrée mais échec du chargement des données', 'warning');
+            });
+        } else {
+            this.showToast('Configuration backend enregistrée', 'success');
+        }
+    }
 
-                    const company = this.company || {};
-                    const client = this.data.clients.find(c => c.id === invoice.clientId) || { company: 'Nom Client', address: '', contact: {} };
-                    const mission = this.data.missions.find(m => m.id === invoice.missionId) || null;
+    showCompanyForm() {
+        document.getElementById('modal-title').textContent = 'Paramètres Société';
+        const c = this.company || {};
+        document.getElementById('modal-body').innerHTML = `
+            <form id="company-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="comp-name">Nom</label>
+                        <input type="text" id="comp-name" class="form-control" value="${c.name || ''}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="comp-phone">Téléphone</label>
+                        <input type="text" id="comp-phone" class="form-control" value="${c.phone || ''}">
+                    </div>
+                </div>
+                <div class="form-row full-width">
+                    <div class="form-group">
+                        <label class="form-label" for="comp-address">Adresse</label>
+                        <textarea id="comp-address" class="form-control">${c.address || ''}</textarea>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="comp-email">Email</label>
+                        <input type="email" id="comp-email" class="form-control" value="${c.email || ''}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="comp-siret">SIRET</label>
+                        <input type="text" id="comp-siret" class="form-control" value="${c.siret || ''}">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="comp-tva">TVA (tva_value)</label>
+                        <input type="text" id="comp-tva" class="form-control" value="${c.tva_value || ''}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="comp-nda">NDA</label>
+                        <input type="text" id="comp-nda" class="form-control" value="${c.nda || ''}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="comp-iban">IBAN</label>
+                        <input type="text" id="comp-iban" class="form-control" value="${c.iban || ''}">
+                    </div>
+                </div>
+            </form>
+        `;
+        this.currentFormType = 'company';
+        this.showModal();
+    }
 
-                    // helper to escape HTML
-                    const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+    async syncLoadFromServer() {
+        if (!this.backend.url || !this.backend.apiKey) {
+            this.showToast('Backend non configuré', 'error');
+            return;
+        }
+        try {
+            const res = await fetch(`${this.backend.url}/api/data`, {
+                method: 'GET',
+                headers: { 'x-api-key': this.backend.apiKey }
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const payload = await res.json();
+            if (payload && payload.data) {
+                // Ensure cras exists
+                if (!payload.data.cras) payload.data.cras = [];
+                this.data = payload.data;
+                // CORRECTION: Mettre à jour immédiatement l'affichage
+                this.updateDashboard();
+                this.renderCharts();
+                this.showPage(this.currentPage);
+                this.showToast('Données chargées depuis le serveur', 'success');
+            }
+        } catch (e) {
+            console.error('Erreur de chargement:', e);
+            this.showToast('Échec du chargement serveur', 'error');
+        }
+    }
 
-                    // compute item rows: prefer invoice.items if present
-                    let itemRowsHtml = '';
-                    if (invoice.items && Array.isArray(invoice.items) && invoice.items.length) {
-                            invoice.items.forEach(item => {
-                                    const desc = esc(item.description || '');
-                                    const qty = item.quantity || '';
-                                    const pu = item.price !== undefined ? Number(item.price).toFixed(2) : '';
-                                    const total = item.total !== undefined ? Number(item.total).toFixed(2) : '';
-                                    itemRowsHtml += `\n      <tr>\n        <td>${desc}</td>\n        <td style="text-align:center">${qty}</td>\n        <td style="text-align:right">${pu}</td>\n        <td style="text-align:right">${total}</td>\n      </tr>`;
-                            });
-                    } else {
-                            // default: show a multiline mission description row then a line for number of days
-                            const missionMultiline = mission ? (`${esc(mission.title)}<br>Responsable: ${esc(client.company)} - ${esc(client.contact && client.contact.name)}<br>Nature de la prestation: ${esc(mission.description || '')}`) : '';
-                            const qty = mission && mission.dailyRate ? Math.round((invoice.amount || 0) / (mission.dailyRate || 1)) : '';
-                            const pu = mission ? (mission.dailyRate !== undefined ? Number(mission.dailyRate).toFixed(0) : '') : '';
-                            const total = invoice.amount !== undefined ? Number(invoice.amount).toFixed(0) : '';
+    async syncSaveToServer() {
+        if (!this.backend.url || !this.backend.apiKey) {
+            this.showToast('Backend non configuré', 'error');
+            return;
+        }
+        try {
+            const res = await fetch(`${this.backend.url}/api/data`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': this.backend.apiKey
+                },
+                body: JSON.stringify({ data: this.data })
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            this.showToast('Synchronisé avec le serveur', 'success');
+        } catch (e) {
+            this.showToast('Échec de synchronisation', 'error');
+        }
+    }
 
-                            itemRowsHtml += `\n      <tr>\n        <td colspan="4" class="multiline">${missionMultiline}</td>\n      </tr>`;
-                            itemRowsHtml += `\n      <tr>\n        <td>Nombre de jours</td>\n        <td style="text-align:center">${qty}</td>\n        <td style="text-align:right">${pu}</td>\n        <td style="text-align:right">${total}</td>\n      </tr>`;
-                            // add some empty placeholder rows like your sample
-                            itemRowsHtml += `\n      <tr>\n        <td>Frais de déplacement</td><td></td><td></td><td></td>\n      </tr>`;
-                            itemRowsHtml += `\n      <tr>\n        <td>Astreinte</td><td></td><td></td><td></td>\n      </tr>`;
-                    }
+    async syncSaveToServerSilent() {
+        if (!this.backend.url || !this.backend.apiKey) return;
+        try {
+            await fetch(`${this.backend.url}/api/data`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': this.backend.apiKey
+                },
+                body: JSON.stringify({ data: this.data })
+            });
+        } catch (_) { /* ignore */ }
+    }
 
-                    const amountHT = invoice.amount || 0;
-                    const vatRate = invoice.vatRate || 0;
-                    const amountTVA = Math.round(amountHT * (vatRate / 100));
-                    const totalTTC = Math.round(amountHT + amountTVA);
+    initializeEventListeners() {
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const page = e.currentTarget.dataset.page;
+                this.showPage(page);
+            });
+        });
 
-                    const html = `<!DOCTYPE html>
-    <html lang="fr">
-    <head>
-        <meta charset="UTF-8">
-        <title>Facture ${esc(invoice.number)}</title>
-        <style>
-            body { font-family: Arial, sans-serif; margin: 40px; }
-            .flex { display: flex; justify-content: space-between; }
-            .box { border: 1px solid #333; padding: 10px; width: 45%; }
-            .info-line { margin-top: 20px; font-weight: bold; }
-            .due-date { margin-top: 10px; font-style: italic; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { border: 1px solid #333; padding: 8px; text-align: left; }
-            .multiline { white-space: pre-line; font-style: italic; }
-            .no-border td { border: none; }
-            .merged { text-align: left; font-weight: bold; }
-            .empty-row td { border: none; height: 20px; }
-        </style>
-    </head>
-    <body>
+        document.getElementById('quick-action-btn').addEventListener('click', () => {
+            this.handleQuickAction();
+        });
 
-        <div class="flex">
-            <div class="box">
-                <strong>Émetteur :</strong><br>
-                ${esc(company.name)}<br>
-                ${esc(company.address)}<br>
-                ${esc(company.email)}<br>
-                SIRET : ${esc(company.siret)}
-            </div>
-            <div class="box">
-                <strong>Client :</strong><br>
-                ${esc(client.company)}<br>
-                ${esc(client.address)}<br>
-                ${esc(client.contact && client.contact.email)}<br>
-                SIRET : ${esc(client.siret)}
-            </div>
-        </div>
-
-        <div class="info-line">
-            Facture n° ${esc(invoice.number)} &nbsp;&nbsp;&nbsp; Date : ${esc(invoice.date)}
-        </div>
-
-        <div class="due-date">
-            Date d'échéance : ${esc(invoice.dueDate)}
-        </div>
-
-        <table>
-            <tr>
-                <th>Libellé</th>
-                <th>Qté</th>
-                <th>P.U</th>
-                <th>Total</th>
-            </tr>
-            ${itemRowsHtml}
-            <tr class="no-border">
-                <td></td>
-                <td colspan="2" class="merged">Valeur total HT</td>
-                <td style="text-align:right">${amountHT.toLocaleString('fr-FR')}</td>
-            </tr>
-            <tr class="no-border">
-                <td></td>
-                <td colspan="2"></td>
-                <td></td>
-            </tr>
-            <tr class="no-border">
-                <td></td>
-                <td colspan="2" class="merged">TVA ${vatRate}%</td>
-                <td style="text-align:right">${amountTVA.toLocaleString('fr-FR')}</td>
-            </tr>
-            <tr class="no-border">
-                <td></td>
-                <td colspan="2" class="merged">Total TTC</td>
-                <td style="text-align:right">${totalTTC.toLocaleString('fr-FR')}</td>
-            </tr>
-        </table>
-
-    </body>
-    </html>`;
-
-                    const win = window.open('', '_blank');
-                    if (!win) {
-                        this.showToast("Impossible d'ouvrir la fenêtre d'impression. Vérifiez les popups.", 'error');
-                        return;
-                    }
-                    win.document.write(html);
-                    win.document.close();
-                    win.focus();
-                    setTimeout(() => { win.print(); }, 500);
         document.getElementById('add-client-btn').addEventListener('click', () => this.showClientForm());
         document.getElementById('add-mission-btn').addEventListener('click', () => this.showMissionForm());
         document.getElementById('add-invoice-btn').addEventListener('click', () => this.showInvoiceForm());
@@ -1607,11 +1621,9 @@ class FreelanceERP {
         const company = this.company || {};
 
         // --- Client ---
-        // Data clients use `company` and `contact` fields; keep a safe fallback structure.
         const client = this.data.clients.find(c => c.id === invoice.clientId) || {
-            company: "Nom Client",
-            address: "Adresse Client",
-            contact: { name: '', email: '', phone: '' }
+            name: "Nom Client",
+            address: "Adresse Client"
         };
 
         // --- Position initiale ---
@@ -1652,46 +1664,20 @@ class FreelanceERP {
         yRight += offset;
         doc.text(`Date d'échéance: ${String(invoice.dueDate || "")}`, rightX, yRight);
 
-        // --- Bloc client (right column) ---
-        // We'll print the client block on the right column (near rightX) so it mirrors the company block on the left.
-        // Start printing client info just below the invoice metadata column (yRight).
-        let clientX = rightX;
-        let clientY = yRight + offset;
-
+        // --- Bloc client ---
+        y += 15;
         doc.setFont("helvetica", "bold");
-        doc.text("Client :", clientX, clientY);
-        clientY += offset;
-
-        // Company name (bold)
-        doc.setFont("helvetica", "bold");
-        doc.text(String(client.company || client.name || ""), clientX, clientY);
-        clientY += offset;
-
-        // Address lines
+        doc.text("Client :", startX, y);
+        y += offset;
         doc.setFont("helvetica", "normal");
+        doc.text(String(client.name || ""), startX, y);
+        y += offset;
         (client.address || "").split("\n").forEach(line => {
             if (line) {
-                doc.text(String(line), clientX, clientY);
-                clientY += offset;
+                y += offset;
+                doc.text(String(line), startX, y);
             }
         });
-
-        // Contact details (name / email / phone)
-        if (client.contact && client.contact.name) {
-            doc.text(`Contact: ${String(client.contact.name)}`, clientX, clientY);
-            clientY += offset;
-        }
-        if (client.contact && client.contact.email) {
-            doc.text(`Email: ${String(client.contact.email)}`, clientX, clientY);
-            clientY += offset;
-        }
-        if (client.contact && client.contact.phone) {
-            doc.text(`Tel: ${String(client.contact.phone)}`, clientX, clientY);
-            clientY += offset;
-        }
-
-        // Ensure the main `y` used for the table starts below the lower of the left and right columns
-        y = Math.max(y, clientY);
 
         // --- Bloc mission ---
         const missionForInvoice = this.data.missions.find(m => m.id === invoice.missionId);
@@ -1739,20 +1725,13 @@ class FreelanceERP {
         tableRows.push(["", "", `TVA ${vatRate}%`, amountTVA.toFixed(2) + " €"]);
         tableRows.push(["", "", "Total TTC", totalTTC.toFixed(2) + " €"]);
 
-        // Configure column widths and alignment so numeric columns are right-aligned
         doc.autoTable({
             startY: y,
             head: [tableColumns],
             body: tableRows,
             theme: 'grid',
             headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-            styles: { fontSize: 10 },
-            columnStyles: {
-                0: { cellWidth: 90, halign: 'left' },   // LIBELLE
-                1: { cellWidth: 20, halign: 'center' }, // Qté
-                2: { cellWidth: 30, halign: 'right' },  // P.U
-                3: { cellWidth: 30, halign: 'right' }   // TOTAL
-            }
+            styles: { fontSize: 10 }
         });
 
         // --- Pied de page ---
