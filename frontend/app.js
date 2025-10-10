@@ -1489,13 +1489,19 @@ class FreelanceERP {
             invoiceDate = `${year}-${month}-${lastDay}`;
         }
         
+        // predict invoice number based on next id and chosen date so the user sees the final number
+        const predictedId = Math.max(0, ...this.data.invoices.map(i => i.id)) + 1;
+        const invoiceDateForPrediction = invoice ? invoice.date : invoiceDate;
+        const yearForPrediction = (invoiceDateForPrediction || new Date().toISOString().split('T')[0]).slice(0,4);
+        const predictedNumber = `FA${yearForPrediction.slice(-2)}-1${String(predictedId).padStart(4,'0')}`;
+
         document.getElementById('modal-title').textContent = title;
         document.getElementById('modal-body').innerHTML = `
             <form id="invoice-form">
                 <div class="form-row">
                     <div class="form-group">
                         <label class="form-label" for="invoice-number">Numéro</label>
-                        <input type="text" id="invoice-number" class="form-control" value="${invoice ? invoice.number : this.generateInvoiceNumber()}" readonly>
+                        <input type="text" id="invoice-number" class="form-control" value="${invoice ? invoice.number : predictedNumber}" readonly>
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="invoice-date">Date *</label>
@@ -1749,10 +1755,34 @@ class FreelanceERP {
 // fin invoice
 
     generateInvoiceNumber() {
-        const year = new Date().getFullYear();
-        const existing = this.data.invoices.filter(i => i.number.includes(year.toString()));
-        const nextNumber = existing.length + 1;
-        return `FACT-${year}-${nextNumber.toString().padStart(3, '0')}`;
+        const now = new Date();
+        const yearFull = now.getFullYear();
+        const yearShort = yearFull.toString().slice(-2);
+
+        // Looser pattern: accept FAyy-1NNNN or FAyy-10001 etc, case-insensitive
+        const regex = new RegExp(`FA${yearShort}-1(\d{4,})`, 'i');
+        let maxSeq = 0;
+
+        for (const inv of this.data.invoices || []) {
+            if (!inv || !inv.number) continue;
+            const m = String(inv.number).match(regex);
+            if (m && m[1]) {
+                const seq = parseInt(m[1], 10);
+                if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+            }
+        }
+
+        // If we generated a number moments ago, track it to avoid duplicates
+        if (!this._lastInvoiceSeq || this._lastInvoiceYear !== yearFull) {
+            this._lastInvoiceYear = yearFull;
+            this._lastInvoiceSeq = maxSeq;
+        }
+
+        const nextSeq = Math.max(maxSeq, this._lastInvoiceSeq) + 1;
+        this._lastInvoiceSeq = nextSeq;
+
+        const padded = String(nextSeq).padStart(4, '0');
+        return `FA${yearShort}-1${padded}`;
     }
 
     showModal() {
@@ -1887,8 +1917,16 @@ class FreelanceERP {
             this.data.invoices[index] = { ...this.currentEditItem, ...formData };
             this.showToast('Facture modifiée avec succès', 'success');
         } else {
+            // assign a unique id first
+            const newId = Math.max(0, ...this.data.invoices.map(i => i.id)) + 1;
+            // determine year from the invoice date (fall back to current year)
+            const invoiceYear = formData.date ? formData.date.slice(0,4) : (new Date().getFullYear().toString());
+            const yearShort = invoiceYear.slice(-2);
+            // build number from id to guarantee uniqueness (FAyy-1NNNN where NNNN is padded id)
+            formData.number = `FA${yearShort}-1${String(newId).padStart(4, '0')}`;
+
             const newInvoice = {
-                id: Math.max(0, ...this.data.invoices.map(i => i.id)) + 1,
+                id: newId,
                 ...formData,
                 createdAt: new Date().toISOString().split('T')[0]
             };
