@@ -35,6 +35,16 @@
                             <i class="fas fa-plus"></i> Nouveau
                         </button>
                     </div>
+                    <div class="header-filters">
+                        <label for="dashboard-year-filter" style="margin-right:8px; color:var(--color-text-secondary); font-size:0.9rem;">Année</label>
+                        <select id="dashboard-year-filter" class="form-control">
+                            <option value="">Toutes les années</option>
+                        </select>
+                    </div>
+                    <div id="year-badge" class="year-badge" title="Filtre année active" style="display:none;">
+                        <span id="year-badge-label"></span>
+                        <button id="year-badge-clear" class="btn btn--clear" title="Effacer le filtre année">×</button>
+                    </div>
                     
                     <div id="company-header" class="company-header"></div>
                 </div>
@@ -202,6 +212,9 @@
                         <select id="mission-client-filter" class="form-control">
                             <option value="">Tous les clients</option>
                         </select>
+                        <select id="mission-year-filter" class="form-control">
+                            <option value="">Toutes les années</option>
+                        </select>
                     </div>
                     <div class="page-actions">
                         <button class="btn btn--primary" id="add-mission-btn">
@@ -233,6 +246,9 @@
                     <div class="page-filters">
                         <select id="cra-month-filter" class="form-control">
                             <option value="">Tous les mois</option>
+                        </select>
+                        <select id="cra-year-filter" class="form-control">
+                            <option value="">Toutes les années</option>
                         </select>
                     </div>
                     <div class="page-actions">
@@ -273,6 +289,11 @@
                         <button class="btn btn--primary" id="add-invoice-btn">
                             <i class="fas fa-plus"></i> Nouvelle facture
                         </button>
+                    </div>
+                    <div style="margin-left:16px;">
+                        <select id="invoice-year-filter" class="form-control">
+                            <option value="">Toutes les années</option>
+                        </select>
                     </div>
                 </div>
                 <div class="table-container">

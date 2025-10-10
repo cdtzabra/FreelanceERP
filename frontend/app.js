@@ -19,6 +19,7 @@ class FreelanceERP {
             }
         };
         this.backend = { url: '', apiKey: '' };
+        this.globalYear = null; // shared year filter across pages (null = all)
         this.suppressRemoteSync = false;
         this.init();
     }
@@ -55,6 +56,23 @@ class FreelanceERP {
             // No backend configured - just update dashboard with empty data
             this.updateDashboard();
             this.suppressRemoteSync = false;
+        }
+        // Populate dashboard year filter and listen to changes
+        const yearSelect = document.getElementById('dashboard-year-filter');
+        if (yearSelect) {
+            yearSelect.addEventListener('change', (e) => {
+                // set global shared year filter
+                const v = e.target.value || null;
+                this.globalYear = v;
+                        // when global changes, update dashboard and charts
+                        this.updateDashboard();
+                        this.renderCharts();
+                        // reflect global on other year selects
+                        ['mission-year-filter','invoice-year-filter','cra-year-filter'].forEach(id => {
+                            const el = document.getElementById(id);
+                            if (el) el.value = v || '';
+                        });
+            });
         }
     }
     // INIT end
@@ -477,8 +495,14 @@ class FreelanceERP {
 
         document.getElementById('mission-status-filter').addEventListener('change', () => this.renderMissions());
         document.getElementById('mission-client-filter').addEventListener('change', () => this.renderMissions());
+    const missionYearEl = document.getElementById('mission-year-filter');
+    if (missionYearEl) missionYearEl.addEventListener('change', (e) => { this.globalYear = e.target.value || null; this.populateDashboardYearFilter(); this.updateDashboard(); this.renderMissions(); this.renderCharts(); });
         document.getElementById('invoice-status-filter').addEventListener('change', () => this.renderInvoices());
-        document.getElementById('cra-month-filter').addEventListener('change', () => this.renderCRAs());
+    const invoiceYearEl = document.getElementById('invoice-year-filter');
+    if (invoiceYearEl) invoiceYearEl.addEventListener('change', (e) => { this.globalYear = e.target.value || null; this.populateDashboardYearFilter(); this.updateDashboard(); this.renderInvoices(); this.renderCharts(); });
+    document.getElementById('cra-month-filter').addEventListener('change', () => this.renderCRAs());
+    const craYearEl = document.getElementById('cra-year-filter');
+    if (craYearEl) craYearEl.addEventListener('change', (e) => { this.globalYear = e.target.value || null; this.populateDashboardYearFilter(); this.renderCRAs(); this.updateDashboard(); this.renderCharts(); });
 
 
         document.getElementById('modal').addEventListener('click', (e) => {
@@ -553,19 +577,23 @@ class FreelanceERP {
     }
 
     updateDashboard() {
-        const totalRevenue = this.data.invoices
+        // Respect selected year filter for dashboard numbers
+        const selectedYear = this.getSelectedYear();
+        const filtered = this.getFilteredData(selectedYear);
+
+        const totalRevenue = filtered.invoices
             .filter(invoice => invoice.status === 'Payée')
             .reduce((sum, invoice) => sum + (invoice.amount * (1 + invoice.vatRate / 100)), 0);
-        
-        const pendingRevenue = this.data.invoices
+
+        const pendingRevenue = filtered.invoices
             .filter(invoice => invoice.status == 'Envoyée' || invoice.status == 'En retard' )
             .reduce((sum, invoice) => sum + (invoice.amount * (1 + invoice.vatRate / 100)), 0);
 
         const generatedRevenue = totalRevenue + pendingRevenue;
-        
-        const activeMissions = this.data.missions.filter(m => m.status === 'En cours').length;
-        const pendingInvoices = this.data.invoices.filter(i => i.status === 'Envoyée').length;
-        const totalClients = this.data.clients.length;
+
+        const activeMissions = filtered.missions.filter(m => m.status === 'En cours').length;
+        const pendingInvoices = filtered.invoices.filter(i => i.status === 'Envoyée').length;
+        const totalClients = this.data.clients.length; // clients are not year-scoped
 
         document.getElementById('total-revenue').textContent = `${totalRevenue.toLocaleString('fr-FR')} €`;
         document.getElementById('pending-revenue').textContent = `${pendingRevenue.toLocaleString('fr-FR')} €`;
@@ -580,6 +608,93 @@ class FreelanceERP {
         this.renderPaidRevenueByMonth();
         this.renderCompanyInfo();
         this.renderCharts();
+        this.populateDashboardYearFilter();
+        this.populateInvoiceFilters();
+    }
+
+    populateInvoiceFilters() {
+        const yearSelect = document.getElementById('invoice-year-filter');
+        if (!yearSelect) return;
+        const years = this.getAvailableYears();
+    yearSelect.innerHTML = '<option value="">Toutes les années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+    yearSelect.value = this.globalYear || '';
+    this.updateYearBadge();
+    }
+
+    populateDashboardYearFilter() {
+        const select = document.getElementById('dashboard-year-filter');
+        if (!select) return;
+        const years = this.getAvailableYears();
+        const existing = select.value || '';
+        let html = '<option value="">Toutes les années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+        select.innerHTML = html;
+        // prefer the shared global year if set, otherwise keep previous selection
+        if (this.globalYear) select.value = this.globalYear; else if (existing) select.value = existing;
+        this.updateYearBadge();
+    }
+
+    getAvailableYears() {
+        const years = new Set();
+        this.data.cras.forEach(c => { if (c.month) years.add(c.month.split('-')[0]); });
+        this.data.invoices.forEach(i => { if (i.date) years.add(i.date.slice(0,4)); if (i.paidDate) years.add(i.paidDate.slice(0,4)); });
+        this.data.missions.forEach(m => { if (m.startDate) years.add(new Date(m.startDate).getFullYear().toString()); if (m.endDate) years.add(new Date(m.endDate).getFullYear().toString()); });
+        // Always include the current year so the selector contains it automatically
+        try { years.add(new Date().getFullYear().toString()); } catch (_) { /* ignore */ }
+        return [...years].sort();
+    }
+
+    getSelectedYear() {
+        // For backward compatibility, this returns the global year
+        return this.globalYear || null;
+    }
+
+    updateYearBadge() {
+        const badge = document.getElementById('year-badge');
+        const label = document.getElementById('year-badge-label');
+        const clearBtn = document.getElementById('year-badge-clear');
+        if (!badge || !label || !clearBtn) return;
+        const y = this.getSelectedYear();
+        if (!y) {
+            badge.style.display = 'none';
+            return;
+        }
+        label.textContent = `Année : ${y}`;
+        badge.style.display = 'inline-flex';
+        clearBtn.onclick = () => {
+            this.globalYear = null;
+            // reset selects
+            ['dashboard-year-filter','mission-year-filter','invoice-year-filter','cra-year-filter'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+            this.updateDashboard();
+            this.renderCharts();
+            this.updateYearBadge();
+        };
+    }
+
+    getFilteredData(selectedYear) {
+        if (!selectedYear) {
+            return { clients: this.data.clients, missions: this.data.missions, invoices: this.data.invoices, cras: this.data.cras };
+        }
+        const yr = parseInt(selectedYear, 10);
+        const yearStart = new Date(yr, 0, 1, 0, 0, 0);
+        const yearEnd = new Date(yr, 11, 31, 23, 59, 59);
+        const missions = this.data.missions.filter(m => {
+            // include mission if its date range intersects the selected year
+            if (!m.startDate && !m.endDate) return false;
+            const s = m.startDate ? new Date(m.startDate) : (m.endDate ? new Date(m.endDate) : null);
+            const e = m.endDate ? new Date(m.endDate) : (m.startDate ? new Date(m.startDate) : null);
+            if (!s || !e) return false;
+            return s <= yearEnd && e >= yearStart;
+        });
+        const invoices = this.data.invoices.filter(i => {
+            const d = i.date ? i.date.slice(0,4) : null;
+            const pd = i.paidDate ? i.paidDate.slice(0,4) : null;
+            return d == selectedYear || pd == selectedYear;
+        });
+        const cras = this.data.cras.filter(c => c.month ? c.month.split('-')[0] == selectedYear : false);
+        return { clients: this.data.clients, missions, invoices, cras };
     }
 
     renderCompanyInfo() {
@@ -634,9 +749,12 @@ class FreelanceERP {
         const totalCanvas = document.getElementById('chart-total');
         if (!window.Chart || (!genCanvas && !paidCanvas && !totalCanvas)) return;
 
-        // Build datasets from already computed tables
+        // Build datasets from already computed tables (respect selected year)
+        const selectedYear = this.getSelectedYear();
+        const { cras, invoices } = this.getFilteredData(selectedYear);
+
         const genMap = new Map();
-        for (const cra of this.data.cras) {
+        for (const cra of cras) {
             const mission = this.data.missions.find(m => m.id === cra.missionId);
             if (!mission) continue;
             const month = cra.month;
@@ -647,7 +765,7 @@ class FreelanceERP {
             v.ht += amountHT; v.tva += vat;
         }
         const paidMap = new Map();
-        for (const inv of this.data.invoices) {
+        for (const inv of invoices) {
             if (inv.status !== 'Payée') continue;
             const dateStr = inv.paidDate || inv.date;
             if (!dateStr) continue;
@@ -718,9 +836,11 @@ class FreelanceERP {
         const body = document.getElementById('generated-revenue-body');
         if (!body) return;
         // Aggregate by CRA month
+        const selectedYear = this.getSelectedYear();
+        const { cras, missions } = this.getFilteredData(selectedYear);
         const map = new Map(); // month -> { days, amountHT, vat, total }
-        for (const cra of this.data.cras) {
-            const mission = this.data.missions.find(m => m.id === cra.missionId);
+        for (const cra of cras) {
+            const mission = missions.find(m => m.id === cra.missionId) || this.data.missions.find(m => m.id === cra.missionId);
             if (!mission) continue;
             const month = cra.month; // YYYY-MM
             const amountHT = (cra.daysWorked || 0) * (mission.dailyRate || 0);
@@ -750,8 +870,10 @@ class FreelanceERP {
     renderPaidRevenueByMonth() {
         const body = document.getElementById('paid-revenue-body');
         if (!body) return;
+        const selectedYear = this.getSelectedYear();
+        const invoices = this.getFilteredData(selectedYear).invoices;
         const map = new Map(); // YYYY-MM -> { amountHT, vat, total }
-        for (const inv of this.data.invoices) {
+        for (const inv of invoices) {
             if (inv.status !== 'Payée') continue;
             const dateStr = inv.paidDate || inv.date; // fallback if missing
             if (!dateStr) continue;
@@ -780,7 +902,9 @@ class FreelanceERP {
 
     renderRecentMissions() {
         const container = document.getElementById('recent-missions');
-        const recentMissions = this.data.missions
+        const selectedYear = this.getSelectedYear();
+        const missions = this.getFilteredData(selectedYear).missions;
+        const recentMissions = missions
             .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
             .slice(0, 5);
 
@@ -801,7 +925,9 @@ class FreelanceERP {
 
     renderPendingInvoices() {
         const container = document.getElementById('pending-invoices-list');
-        const pendingInvoices = this.data.invoices.filter(i => i.status === 'Envoyée' || i.status === 'En retard');
+    const selectedYear = this.getSelectedYear();
+    const invoices = this.getFilteredData(selectedYear).invoices;
+    const pendingInvoices = invoices.filter(i => i.status === 'Envoyée' || i.status === 'En retard');
 
         container.innerHTML = pendingInvoices.map(invoice => {
             const client = this.data.clients.find(c => c.id === invoice.clientId);
@@ -940,16 +1066,11 @@ class FreelanceERP {
     renderMissions() {
         const statusFilter = document.getElementById('mission-status-filter').value;
         const clientFilter = document.getElementById('mission-client-filter').value;
-        
-        let filteredMissions = this.data.missions;
-        
-        if (statusFilter) {
-            filteredMissions = filteredMissions.filter(m => m.status === statusFilter);
-        }
-        
-        if (clientFilter) {
-            filteredMissions = filteredMissions.filter(m => m.clientId === parseInt(clientFilter));
-        }
+        const selectedYear = this.getSelectedYear();
+        let filteredMissions = this.getFilteredData(selectedYear).missions;
+
+        if (statusFilter) filteredMissions = filteredMissions.filter(m => m.status === statusFilter);
+        if (clientFilter) filteredMissions = filteredMissions.filter(m => m.clientId === parseInt(clientFilter));
 
         const tbody = document.getElementById('missions-table-body');
         tbody.innerHTML = filteredMissions.map(mission => {
@@ -983,10 +1104,20 @@ class FreelanceERP {
 
     populateMissionFilters() {
         const clientFilter = document.getElementById('mission-client-filter');
-        clientFilter.innerHTML = '<option value="">Tous les clients</option>' +
-            this.data.clients.map(client => 
-                `<option value="${client.id}">${client.company}</option>`
-            ).join('');
+        if (clientFilter) {
+            clientFilter.innerHTML = '<option value="">Tous les clients</option>' +
+                this.data.clients.map(client => 
+                    `<option value="${client.id}">${client.company}</option>`
+                ).join('');
+        }
+        // populate year filter
+        const yearSelect = document.getElementById('mission-year-filter');
+        if (yearSelect) {
+            const years = this.getAvailableYears();
+            yearSelect.innerHTML = '<option value="">Toutes les années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+            yearSelect.value = this.globalYear || '';
+        }
+        this.updateYearBadge();
     }
 
     showMissionForm(mission = null) {
@@ -1088,12 +1219,10 @@ class FreelanceERP {
 
     renderCRAs() {
         const monthFilter = document.getElementById('cra-month-filter').value;
-        
-        let filteredCRAs = this.data.cras;
-        
-        if (monthFilter) {
-            filteredCRAs = filteredCRAs.filter(cra => cra.month === monthFilter);
-        }
+        const selectedYear = this.getSelectedYear();
+
+        let filteredCRAs = this.getFilteredData(selectedYear).cras;
+        if (monthFilter) filteredCRAs = filteredCRAs.filter(cra => cra.month === monthFilter);
 
         const crasByMonth = {};
         filteredCRAs.forEach(cra => {
@@ -1158,10 +1287,20 @@ class FreelanceERP {
 
     populateCRAFilters() {
         const monthFilter = document.getElementById('cra-month-filter');
+        const yearFilter = document.getElementById('cra-year-filter');
         const months = [...new Set(this.data.cras.map(cra => cra.month))].sort().reverse();
-        
-        monthFilter.innerHTML = '<option value="">Tous les mois</option>' +
-            months.map(month => `<option value="${month}">${this.formatMonth(month)}</option>`).join('');
+        const years = [...new Set(this.data.cras.map(cra => cra.month ? cra.month.split('-')[0] : null).filter(Boolean))].sort().reverse();
+
+        if (monthFilter) {
+            monthFilter.innerHTML = '<option value="">Tous les mois</option>' +
+                months.map(month => `<option value="${month}">${this.formatMonth(month)}</option>`).join('');
+        }
+        if (yearFilter) {
+            yearFilter.innerHTML = '<option value="">Toutes les années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+            // set to follow global by default
+            yearFilter.value = this.globalYear || '';
+        }
+        this.updateYearBadge();
     }
 
     showCRAForm(cra = null) {
@@ -1300,11 +1439,10 @@ class FreelanceERP {
 
     renderInvoices() {
         const statusFilter = document.getElementById('invoice-status-filter').value;
-        let filteredInvoices = this.data.invoices;
-        
-        if (statusFilter) {
-            filteredInvoices = filteredInvoices.filter(i => i.status === statusFilter);
-        }
+        const selectedYear = this.getSelectedYear();
+        let filteredInvoices = this.getFilteredData(selectedYear).invoices;
+
+        if (statusFilter) filteredInvoices = filteredInvoices.filter(i => i.status === statusFilter);
 
         const tbody = document.getElementById('invoices-table-body');
         tbody.innerHTML = filteredInvoices.map(invoice => {
