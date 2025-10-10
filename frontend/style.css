@@ -1392,3 +1392,46 @@ select.form-control {
     padding: var(--space-16);
   }
 }
+
+/* Header actions responsive */
+.header-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 8px;
+  align-items: center;
+}
+.header-actions::-webkit-scrollbar {
+  height: 6px;
+}
+.header-actions::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+/* Buttons container fix */
+.header-buttons {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+/* Sidebar responsive */
+.sidebar {
+  width: 240px;
+  min-width: 180px;
+}
+@media (max-width: 768px) {
+  .sidebar {
+      width: 180px;
+      position: fixed;
+      left: 0;
+      top: 0;
+      height: 100%;
+      overflow-y: auto;
+      z-index: 1000;
+  }
+  .main-content {
+      margin-left: 180px;
+  }
+}
