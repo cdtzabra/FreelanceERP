@@ -20,6 +20,8 @@
                 <li><a href="#" data-page="missions" class="nav-link"><i class="fas fa-tasks"></i> Missions</a></li>
                 <li><a href="#" data-page="cra" class="nav-link"><i class="fas fa-calendar-check"></i> CRA</a></li>
                 <li><a href="#" data-page="invoices" class="nav-link"><i class="fas fa-file-invoice"></i> Factures</a></li>
+                <li><a href="#" data-page="settings" class="nav-link"><i class="fas fa-cog"></i> Paramètres</a></li>
+
             </ul>
         </nav>
 
@@ -29,21 +31,9 @@
                 <div class="header-content">
                     <h1 id="page-title">Tableau de bord</h1>
                     <div class="header-actions">
-                        <div class="search-box">
-                            <i class="fas fa-search"></i>
-                            <input type="text" id="global-search" placeholder="Rechercher...">
-                        </div>
                         <button class="btn btn--primary" id="quick-action-btn">
                             <i class="fas fa-plus"></i> Nouveau
                         </button>
-                        <div class="header-buttons">
-                            <button id="btn-export" class="btn">Export</button>
-                            <button id="btn-import" class="btn">Import</button>
-                            <input id="file-input" type="file" accept=".json,.xlsx,.xls,.csv" style="display:none" />
-                            <button id="btn-backend-config" class="btn">Backend</button>
-                            <button id="btn-sync" class="btn btn--secondary">Sync</button>
-                            <button id="btn-company" class="btn">Société</button>
-                        </div>
                     </div>
                     
                     <div id="company-header" class="company-header"></div>
@@ -302,6 +292,47 @@
                     </table>
                 </div>
             </div>
+            <!-- Settings Page -->
+            <div id="settings-page" class="page">
+                <h2>Paramètres</h2>
+                <div class="settings-section">
+                    <h3>Backend</h3>
+                    <p>Configurer le backend distant et la clé API</p>
+                    <div class="form-row">
+                        <button id="btn-backend-config" class="btn">Configurer</button>
+                        <button id="btn-sync" class="btn btn--secondary">Synchroniser</button>
+                    </div>
+                    <div class="backend-info">
+                        <p><strong>URL :</strong> <span id="backend-url"></span></p>
+                        <p><strong>API Key :</strong> <span id="backend-key"></span></p>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>Données</h3>
+                    <div class="form-row">
+                        <button id="btn-export" class="btn">Exporter</button>
+                        <button id="btn-import" class="btn">Importer</button>
+                        <input id="file-input" type="file" accept=".json,.xlsx,.xls,.csv" style="display:none" />
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>Société</h3>
+                    <button id="btn-company" class="btn">Modifier les informations</button>
+                    <div id="company-summary" class="company-card"></div>
+                </div>
+            </div>
+            
+            <footer class="app-footer">
+                <div class="footer-content">
+                    <span>© 2025 FreelanceERP</span>
+                    <span>Version 1.0.0</span>
+                    <a href="https://github.com/tonrepo" target="_blank" rel="noopener">Code source</a>
+                </div>
+            </footer>
+            
+
         </main>
     </div>
 

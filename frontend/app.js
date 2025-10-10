@@ -480,9 +480,6 @@ class FreelanceERP {
         document.getElementById('invoice-status-filter').addEventListener('change', () => this.renderInvoices());
         document.getElementById('cra-month-filter').addEventListener('change', () => this.renderCRAs());
 
-        document.getElementById('global-search').addEventListener('input', (e) => {
-            this.handleGlobalSearch(e.target.value);
-        });
 
         document.getElementById('modal').addEventListener('click', (e) => {
             if (e.target.id === 'modal') {
@@ -505,7 +502,8 @@ class FreelanceERP {
             clients: 'Clients',
             missions: 'Missions',
             cra: 'Comptes Rendus d\'Activité',
-            invoices: 'Factures'
+            invoices: 'Factures',
+            settings: 'Paramètres'
         };
         document.getElementById('page-title').textContent = titles[page];
 
@@ -528,6 +526,9 @@ class FreelanceERP {
                 break;
             case 'invoices':
                 this.renderInvoices();
+                break;
+            case 'settings':
+                this.renderSettings();
                 break;
         }
     }
@@ -1272,6 +1273,23 @@ class FreelanceERP {
         return `${months[parseInt(month) - 1]} ${year}`;
     }
 
+
+    renderSettings() {
+        const backendUrlEl = document.getElementById('backend-url');
+        const backendKeyEl = document.getElementById('backend-key');
+        if (backendUrlEl) backendUrlEl.textContent = this.backend.url || 'Non configuré';
+        if (backendKeyEl) backendKeyEl.textContent = this.backend.apiKey || 'Non défini';
+    
+        const company = this.company || {};
+        const el = document.getElementById('company-summary');
+        if (el) {
+            el.innerHTML = company.name
+                ? `<p><strong>${company.name}</strong><br>${company.address || ''}<br>${company.email || ''}</p>`
+                : '<p style="color:var(--color-text-secondary);">Aucune information société configurée.</p>';
+        }
+    }
+    
+
     renderInvoices() {
         const statusFilter = document.getElementById('invoice-status-filter').value;
         let filteredInvoices = this.data.invoices;
@@ -1437,153 +1455,150 @@ class FreelanceERP {
     // }
 
 
-printInvoice(id) {
-    const invoice = this.data.invoices.find(i => i.id === id);
-    if (!invoice) {
-        this.showToast('Facture introuvable', 'error');
-        return;
-    }
-
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF('p', 'mm', 'a4');
-
-    // --- Entreprise émettrice ---
-    const company = this.company || {};
-
-    // --- Client ---
-    const client = this.data.clients.find(c => c.id === invoice.clientId) || {
-        name: "Nom Client",
-        address: "Adresse Client"
-    };
-
-    // --- Position initiale ---
-    const startX = 20;
-    let y = 20;
-    const offset = 6;
-
-    // --- Bloc entreprise ---
-    doc.setFontSize(16);
-    doc.setFont("helvetica", "bold");
-    doc.text(String(company.name || ""), startX, y);
-
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-
-    const companyLines = [
-        company.address,
-        company.phone,
-        company.email,
-        company.siret
-    ];
-
-    companyLines.forEach(line => {
-        if (line) {
-            y += offset;
-            doc.text(String(line), startX, y);
+    printInvoice(id) {
+        const invoice = this.data.invoices.find(i => i.id === id);
+        if (!invoice) {
+            this.showToast('Facture introuvable', 'error');
+            return;
         }
-    });
 
-    // --- Bloc facture (droite) ---
-    const rightX = 150;
-    let yRight = 20;
-    doc.setFont("helvetica", "bold");
-    doc.text(`Facture N°: ${String(invoice.number || "")}`, rightX, yRight);
-    yRight += offset;
-    doc.setFont("helvetica", "normal");
-    doc.text(`Date: ${String(invoice.date || "")}`, rightX, yRight);
-    yRight += offset;
-    doc.text(`Date d'échéance: ${String(invoice.dueDate || "")}`, rightX, yRight);
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('p', 'mm', 'a4');
 
-    // --- Bloc client ---
-    y += 15;
-    doc.setFont("helvetica", "bold");
-    doc.text("Client :", startX, y);
-    y += offset;
-    doc.setFont("helvetica", "normal");
-    doc.text(String(client.name || ""), startX, y);
-    y += offset;
-    (client.address || "").split("\n").forEach(line => {
-        if (line) {
-            y += offset;
-            doc.text(String(line), startX, y);
-        }
-    });
+        // --- Entreprise émettrice ---
+        const company = this.company || {};
 
-    // --- Bloc mission ---
-    const missionForInvoice = this.data.missions.find(m => m.id === invoice.missionId);
-    if (missionForInvoice) {
-        y += 12;
+        // --- Client ---
+        const client = this.data.clients.find(c => c.id === invoice.clientId) || {
+            name: "Nom Client",
+            address: "Adresse Client"
+        };
+
+        // --- Position initiale ---
+        const startX = 20;
+        let y = 20;
+        const offset = 6;
+
+        // --- Bloc entreprise ---
+        doc.setFontSize(16);
         doc.setFont("helvetica", "bold");
-        doc.text("Mission :", startX, y);
+        doc.text(String(company.name || ""), startX, y);
+
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+
+        const companyLines = [
+            company.address,
+            company.phone,
+            company.email,
+            company.siret
+        ];
+
+        companyLines.forEach(line => {
+            if (line) {
+                y += offset;
+                doc.text(String(line), startX, y);
+            }
+        });
+
+        // --- Bloc facture (droite) ---
+        const rightX = 150;
+        let yRight = 20;
+        doc.setFont("helvetica", "bold");
+        doc.text(`Facture N°: ${String(invoice.number || "")}`, rightX, yRight);
+        yRight += offset;
+        doc.setFont("helvetica", "normal");
+        doc.text(`Date: ${String(invoice.date || "")}`, rightX, yRight);
+        yRight += offset;
+        doc.text(`Date d'échéance: ${String(invoice.dueDate || "")}`, rightX, yRight);
+
+        // --- Bloc client ---
+        y += 15;
+        doc.setFont("helvetica", "bold");
+        doc.text("Client :", startX, y);
         y += offset;
         doc.setFont("helvetica", "normal");
-        doc.text(String(missionForInvoice.title || ""), startX, y);
-        if (missionForInvoice.description) {
-            const descLines = doc.splitTextToSize(String(missionForInvoice.description), 170);
-            descLines.forEach(line => {
+        doc.text(String(client.name || ""), startX, y);
+        y += offset;
+        (client.address || "").split("\n").forEach(line => {
+            if (line) {
                 y += offset;
-                doc.text(line, startX, y);
-            });
+                doc.text(String(line), startX, y);
+            }
+        });
+
+        // --- Bloc mission ---
+        const missionForInvoice = this.data.missions.find(m => m.id === invoice.missionId);
+        if (missionForInvoice) {
+            y += 12;
+            doc.setFont("helvetica", "bold");
+            doc.text("Mission :", startX, y);
+            y += offset;
+            doc.setFont("helvetica", "normal");
+            doc.text(String(missionForInvoice.title || ""), startX, y);
+            if (missionForInvoice.description) {
+                const descLines = doc.splitTextToSize(String(missionForInvoice.description), 170);
+                descLines.forEach(line => {
+                    y += offset;
+                    doc.text(line, startX, y);
+                });
+            }
         }
+
+        // --- Tableau items / ligne principale ---
+        y += 15;
+        const tableColumns = ["LIBELLE", "Qté", "P.U", "TOTAL"];
+        let tableRows = [];
+
+        if (invoice.items && Array.isArray(invoice.items) && invoice.items.length > 0) {
+            tableRows = invoice.items.map(item => [
+                String(item.description || ""),
+                String(item.quantity || 1),
+                item.price !== undefined ? item.price.toFixed(2) + " €" : "-",
+                item.total !== undefined ? item.total.toFixed(2) + " €" : ((item.quantity||1)*(item.price||0)).toFixed(2) + " €"
+            ]);
+        } else {
+            tableRows = [
+                [`Facture ${String(invoice.number || "")}`, "1", (invoice.amount || 0).toFixed(2) + " €", (invoice.amount || 0).toFixed(2) + " €"]
+            ];
+        }
+
+        // --- Totaux ---
+        const amountHT = invoice.amount || 0;
+        const vatRate = invoice.vatRate || 0;
+        const amountTVA = amountHT * (vatRate / 100);
+        const totalTTC = amountHT + amountTVA;
+
+        tableRows.push(["", "", "Total HT", amountHT.toFixed(2) + " €"]);
+        tableRows.push(["", "", `TVA ${vatRate}%`, amountTVA.toFixed(2) + " €"]);
+        tableRows.push(["", "", "Total TTC", totalTTC.toFixed(2) + " €"]);
+
+        doc.autoTable({
+            startY: y,
+            head: [tableColumns],
+            body: tableRows,
+            theme: 'grid',
+            headStyles: { fillColor: [41, 128, 185], textColor: 255 },
+            styles: { fontSize: 10 }
+        });
+
+        // --- Pied de page ---
+        const finalY = doc.lastAutoTable.finalY || y + 40;
+        doc.setFontSize(10);
+        const footerLines = [
+            company.tva_value ? `TVA: ${String(company.tva_value)}` : '',
+            company.nda ? `NDA: ${String(company.nda)}` : '',
+            company.iban ? `IBAN: ${String(company.iban)}` : ''
+        ].filter(Boolean);
+        if (footerLines.length) {
+            doc.text(footerLines.join('   '), startX, finalY + 10);
+        }
+
+        // --- Télécharger le PDF ---
+        const dateForName = (invoice.date || new Date().toISOString().split('T')[0]).split('-');
+        const fileName = `${dateForName[2]}-${dateForName[1]}-facture.pdf`;
+        doc.save(fileName);
     }
-
-    // --- Tableau items / ligne principale ---
-    y += 15;
-    const tableColumns = ["LIBELLE", "Qté", "P.U", "TOTAL"];
-    let tableRows = [];
-
-    if (invoice.items && Array.isArray(invoice.items) && invoice.items.length > 0) {
-        tableRows = invoice.items.map(item => [
-            String(item.description || ""),
-            String(item.quantity || 1),
-            item.price !== undefined ? item.price.toFixed(2) + " €" : "-",
-            item.total !== undefined ? item.total.toFixed(2) + " €" : ((item.quantity||1)*(item.price||0)).toFixed(2) + " €"
-        ]);
-    } else {
-        tableRows = [
-            [`Facture ${String(invoice.number || "")}`, "1", (invoice.amount || 0).toFixed(2) + " €", (invoice.amount || 0).toFixed(2) + " €"]
-        ];
-    }
-
-    // --- Totaux ---
-    const amountHT = invoice.amount || 0;
-    const vatRate = invoice.vatRate || 0;
-    const amountTVA = amountHT * (vatRate / 100);
-    const totalTTC = amountHT + amountTVA;
-
-    tableRows.push(["", "", "Total HT", amountHT.toFixed(2) + " €"]);
-    tableRows.push(["", "", `TVA ${vatRate}%`, amountTVA.toFixed(2) + " €"]);
-    tableRows.push(["", "", "Total TTC", totalTTC.toFixed(2) + " €"]);
-
-    doc.autoTable({
-        startY: y,
-        head: [tableColumns],
-        body: tableRows,
-        theme: 'grid',
-        headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-        styles: { fontSize: 10 }
-    });
-
-    // --- Pied de page ---
-    const finalY = doc.lastAutoTable.finalY || y + 40;
-    doc.setFontSize(10);
-    const footerLines = [
-        company.tva_value ? `TVA: ${String(company.tva_value)}` : '',
-        company.nda ? `NDA: ${String(company.nda)}` : '',
-        company.iban ? `IBAN: ${String(company.iban)}` : ''
-    ].filter(Boolean);
-    if (footerLines.length) {
-        doc.text(footerLines.join('   '), startX, finalY + 10);
-    }
-
-    // --- Télécharger le PDF ---
-    const dateForName = (invoice.date || new Date().toISOString().split('T')[0]).split('-');
-    const fileName = `${dateForName[2]}-${dateForName[1]}-facture.pdf`;
-    doc.save(fileName);
-}
-
-
-
 
 // fin invoice
 
@@ -1758,89 +1773,6 @@ printInvoice(id) {
         this.showToast('Informations société enregistrées', 'success');
     }
 
-    // handleGlobalSearch(query) {
-    //     if (!query.trim()) return;
-
-    //     const results = [];
-        
-    //     this.data.clients.forEach(client => {
-    //         if (client.company.toLowerCase().includes(query.toLowerCase()) ||
-    //             client.contact.name.toLowerCase().includes(query.toLowerCase()) ||
-    //             client.siren.includes(query)) {
-    //             results.push({ type: 'client', item: client });
-    //         }
-    //     });
-
-    //     this.data.missions.forEach(mission => {
-    //         if (mission.title.toLowerCase().includes(query.toLowerCase()) ||
-    //             mission.description.toLowerCase().includes(query.toLowerCase())) {
-    //             results.push({ type: 'mission', item: mission });
-    //         }
-    //     });
-
-    //     this.data.invoices.forEach(invoice => {
-    //         if (invoice.number.toLowerCase().includes(query.toLowerCase())) {
-    //             results.push({ type: 'invoice', item: invoice });
-    //         }
-    //     });
-
-    //     if (results.length > 0) {
-    //         this.showToast(`${results.length} résultat(s) trouvé(s)`, 'info');
-    //     }
-    // }
-
-    handleGlobalSearch(query) {
-        query = query.trim().toLowerCase();
-        if (!query) {
-            // Si champ vidé → recharger la page courante complète
-            this.showPage(this.currentPage);
-            return;
-        }
-    
-        // Sélecteur de la table selon la page active
-        let rows;
-        switch (this.currentPage) {
-            case 'clients':
-                rows = document.querySelectorAll('#clients-table-body tr');
-                break;
-            case 'missions':
-                rows = document.querySelectorAll('#missions-table-body tr');
-                break;
-            case 'invoices':
-                rows = document.querySelectorAll('#invoices-table-body tr');
-                break;
-            case 'cra':
-                rows = document.querySelectorAll('#cra-table-body tr');
-                break;
-            default:
-                return;
-        }
-    
-        let visibleCount = 0;
-        rows.forEach(row => {
-            const text = row.textContent.toLowerCase();
-            const match = text.includes(query);
-            row.style.display = match ? '' : 'none';
-            if (match) visibleCount++;
-        });
-    
-        // plus de toast : affichage direct dans l'UI
-        const table = rows[0]?.closest('table');
-        if (table) {
-            const oldInfo = table.parentElement.querySelector('.search-info');
-            if (oldInfo) oldInfo.remove();
-            const info = document.createElement('div');
-            info.className = 'search-info';
-            info.style.fontSize = '12px';
-            info.style.color = 'var(--color-text-secondary)';
-            info.style.marginTop = '4px';
-            info.textContent = visibleCount > 0
-                ? `${visibleCount} ligne(s) affichée(s)`
-                : 'Aucun résultat';
-            table.parentElement.appendChild(info);
-        }
-    }
-    
 
     getStatusClass(status) {
         switch (status) {
