@@ -1044,6 +1044,14 @@ class FreelanceERP {
                         <input type="number" id="daily-rate" class="form-control" value="${mission ? mission.dailyRate : ''}" min="0" step="0.01" required>
                     </div>
                 </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="vatRate">TVA (%)</label>
+                        <input type="number" id="vatRate" class="form-control" min="0" step="0.1"
+                            value="${mission ? mission.vatRate ?? 20 : 20}">
+                    </div>
+                </div>
+
             </form>
         `;
 
@@ -1694,7 +1702,9 @@ class FreelanceERP {
             startDate: document.getElementById('start-date').value,
             endDate: document.getElementById('end-date').value,
             dailyRate: parseFloat(document.getElementById('daily-rate').value),
+            vatRate: parseFloat(document.getElementById('vatRate').value),
             status: document.getElementById('mission-status').value
+
         };
 
         if (new Date(formData.startDate) > new Date(formData.endDate)) {
