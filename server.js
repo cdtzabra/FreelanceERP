@@ -33,12 +33,6 @@ function buildCorsOptions() {
     };
 }
 
-// function requireApiKey(req, res, next) {
-//     const apiKey = req.header('x-api-key');
-//     if (!apiKey) return res.status(401).json({ error: 'Missing x-api-key header' });
-//     req.apiKey = apiKey;
-//     next();
-// }
 const allowedKeys =
   process.env.ALLOWED_API_KEYS?.split(',').map(s => s.trim()).filter(Boolean) || [];
 
@@ -72,11 +66,10 @@ async function main() {
     const dbFile = process.env.DB_FILE || './data.sqlite';
     const db = await initDb(dbFile);
 
-    // basic auth for frontend
-    app.use(basicAuth);
-
-    app.use(cors(buildCorsOptions()));
-    app.use(express.json({ limit: '2mb' }));
+    app.disable('x-powered-by');
+    app.use(cors(buildCorsOptions())); // security
+    app.use(basicAuth); // security basic auth
+    app.use(express.json({ limit: '4mb' }));
 
     app.get('/health', (req, res) => {
         res.json({ ok: true, now: new Date().toISOString() });
