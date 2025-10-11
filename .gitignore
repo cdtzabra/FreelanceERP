@@ -1,2 +1,5 @@
 bak_*
 */bak_*
+data.sqlite
+node_modules/
+package-lock.json
