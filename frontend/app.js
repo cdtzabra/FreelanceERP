@@ -13,7 +13,7 @@ class FreelanceERP {
                 phone: '',
                 email: '',
                 siret: '',
-                tva_value: '',
+                tva_id: '',
                 nda: '',
                 iban: ''
             }
@@ -390,8 +390,8 @@ class FreelanceERP {
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label" for="comp-tva">TVA (tva_value)</label>
-                        <input type="text" id="comp-tva" class="form-control" value="${c.tva_value || ''}">
+                        <label class="form-label" for="comp-tva">TVA (tva_id)</label>
+                        <input type="text" id="comp-tva" class="form-control" value="${c.tva_id || ''}">
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="comp-nda">NDA</label>
@@ -702,8 +702,6 @@ class FreelanceERP {
         if (!el) return;
         const c = this.company || {};
         
-        // const hasData = c.name || c.address || c.phone || c.email || c.siret || c.tva_value || c.nda || c.iban;
-        
         if (!c.name) {
             el.innerHTML = '<p style="color: var(--color-text-secondary);">Aucune information société. Cliquez sur "Société" pour configurer.</p>';
             return;
@@ -715,7 +713,7 @@ class FreelanceERP {
                 ${c.siret ? `<div class="item"><label>SIRET</label><div>${c.siret}</div></div>` : ''}
                 ${c.email ? `<div class="item"><label>Email</label><div>${c.email}</div></div>` : ''}
                 ${c.phone ? `<div class="item"><label>Téléphone</label><div>${c.phone}</div></div>` : ''}
-                ${c.tva_value ? `<div class="item"><label>TVA</label><div>${c.tva_value}</div></div>` : ''}
+                ${c.tva_id ? `<div class="item"><label>TVA</label><div>${c.tva_id}</div></div>` : ''}
                 ${c.nda ? `<div class="item"><label>NDA</label><div>${c.nda}</div></div>` : ''}
                 ${c.iban ? `<div class="item"><label>IBAN</label><div>${c.iban}</div></div>` : ''}
                 ${c.address ? `<div class="item" style="grid-column: 1 / -1;"><label>Adresse</label><div>${c.address.replace(/\n/g, '<br>')}</div></div>` : ''}
@@ -737,7 +735,7 @@ class FreelanceERP {
                 <strong>${c.name || ''}</strong>
                 <span>${(c.address || '').replace(/\n/g, ' · ')}</span>
                 <span>${c.siret || ''}</span>
-                <span>${c.tva_value || ''}</span>
+                <span>${c.tva_id || ''}</span>
                 <span>${c.iban || ''}</span>
             </div>
         `;
@@ -1425,7 +1423,12 @@ class FreelanceERP {
         const backendUrlEl = document.getElementById('backend-url');
         const backendKeyEl = document.getElementById('backend-key');
         if (backendUrlEl) backendUrlEl.textContent = this.backend.url || 'Non configuré';
-        if (backendKeyEl) backendKeyEl.textContent = this.backend.apiKey || 'Non défini';
+        // if (backendKeyEl) backendKeyEl.textContent = this.backend.apiKey || 'Non défini';
+        if (backendKeyEl) {
+        const key = this.backend.apiKey;
+        // display only last 4 characters for security
+        backendKeyEl.textContent = key ? '*'.repeat(key.length - 4) + key.slice(-4) : 'Non défini';
+        }
     
         const company = this.company || {};
         const el = document.getElementById('company-summary');
@@ -1482,11 +1485,13 @@ class FreelanceERP {
         
         // Si on a un CRA, on utilise son mois pour la date de facture
         let invoiceDate = new Date().toISOString().split('T')[0];
+        let activityMonth = new Date().toISOString().slice(0, 7);
+        // activityMont is the month of the work done, default to current month
         if (cra && cra.month) {
-            // Utiliser le dernier jour du mois du CRA
+            // Use CRA activity month
             const [year, month] = cra.month.split('-');
             const lastDay = new Date(year, month, 0).getDate();
-            invoiceDate = `${year}-${month}-${lastDay}`;
+            activityMonth = `${year}-${month}`;
         }
         
         // predict invoice number based on next id and chosen date so the user sees the final number
@@ -1494,6 +1499,16 @@ class FreelanceERP {
         const invoiceDateForPrediction = invoice ? invoice.date : invoiceDate;
         const yearForPrediction = (invoiceDateForPrediction || new Date().toISOString().split('T')[0]).slice(0,4);
         const predictedNumber = `FA${yearForPrediction.slice(-2)}-1${String(predictedId).padStart(4,'0')}`;
+
+        // Compute quantity par défaut
+        let defaultQuantity = 1;
+        if (cra && cra.daysWorked) {
+            // Si créé depuis un CRA, utiliser les jours du CRA
+            defaultQuantity = cra.daysWorked;
+        } else if (mission && mission.dailyRate && amount) {
+            // Sinon calculer depuis amount/dailyRate
+            defaultQuantity = Math.round((amount / mission.dailyRate) * 100) / 100;
+        }
 
         document.getElementById('modal-title').textContent = title;
         document.getElementById('modal-body').innerHTML = `
@@ -1530,12 +1545,25 @@ class FreelanceERP {
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label" for="invoice-amount">Montant HT (€) *</label>
+                        <label class="form-label" for="invoice-quantity">Quantité (jours/unités) *</label>
+                        <input type="number" id="invoice-quantity" class="form-control" value="${invoice ? invoice.quantity || 1 : defaultQuantity}" min="0.5" step="0.5" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="invoice-amount">Montant unitaire HT (€) *</label>
                         <input type="number" id="invoice-amount" class="form-control" value="${invoice ? invoice.amount : amount}" min="0" step="0.01" required>
                     </div>
+                </div>
+                <div class="form-row">
                     <div class="form-group">
                         <label class="form-label" for="invoice-vat">TVA (%) *</label>
                         <input type="number" id="invoice-vat" class="form-control" value="${invoice ? invoice.vatRate : 20}" min="0" max="100" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="invoice-template">Modèle d'impression</label>
+                        <select id="invoice-template" class="form-control">
+                            <option value="standard" ${invoice && invoice.invoiceTemplate === 'standard' ? 'selected' : ''}>Standard (avec frais)</option>
+                            <option value="minimal" ${invoice && invoice.invoiceTemplate === 'minimal' ? 'selected' : ''}>Minimaliste</option>
+                        </select>
                     </div>
                 </div>
                 <div class="form-row">
@@ -1553,13 +1581,48 @@ class FreelanceERP {
                         <input type="date" id="invoice-due-date" class="form-control" value="${invoice ? invoice.dueDate : ''}">
                     </div>
                     <div class="form-group">
+                        <label class="form-label" for="invoice-date">Période Activité *</label>
+                        <input type="month" id="invoice-activity-month" class="form-control" value="${invoice ? invoice.activityMonth : activityMonth}">
+                    </div>
+                    <div class="form-group">
                         <label class="form-label" for="invoice-paid-date">Date de paiement</label>
                         <input type="date" id="invoice-paid-date" class="form-control" value="${invoice && invoice.paidDate ? invoice.paidDate : ''}" ${invoice && invoice.status === 'Payée' ? '' : 'disabled'}>
                     </div>
                 </div>
-                ${cra ? `<p class="info-text">💡 Facture générée depuis le CRA de ${this.formatMonth(cra.month)} (${cra.daysWorked} jours travaillés)</p>` : ''}
+
+                <div style="background: #f9fafb; padding: 12px; border-radius: 8px; margin-top: 16px;">
+                    <p style="margin: 0 0 8px 0; font-weight: 600;">Résumé</p>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px;">
+                        <div><span style="color: var(--color-text-secondary);">Montant HT :</span> <span id="summary-ht" style="font-weight: 600;">0€</span></div>
+                        <div><span style="color: var(--color-text-secondary);">TVA :</span> <span id="summary-vat" style="font-weight: 600;">0€</span></div>
+                        <div style="grid-column: 1/-1;"><span style="color: var(--color-text-secondary);">Total TTC :</span> <span id="summary-ttc" style="font-weight: 600; color: var(--color-primary); font-size: 14px;">0€</span></div>
+                    </div>
+                </div>
+
+                ${cra ? `<p class="info-text" style="margin-top: 16px; padding: 8px; background: #e8f5e9; border-radius: 4px;">💡 Facture générée depuis le CRA de ${this.formatMonth(cra.month)} (${cra.daysWorked} jours travaillés)</p>` : ''}
             </form>
         `;
+
+        // Compute the summary and display it in the form bottom
+        const updateSummary = () => {
+            const quantity = parseFloat(document.getElementById('invoice-quantity').value) || 0;
+            const amount = parseFloat(document.getElementById('invoice-amount').value) || 0;
+            const vat = parseFloat(document.getElementById('invoice-vat').value) || 0;
+
+            const ht = amount;
+            const vatAmount = ht * (vat / 100);
+            const ttc = ht + vatAmount;
+
+            document.getElementById('summary-ht').textContent = ht.toLocaleString('fr-FR', {maximumFractionDigits: 2}) + '€';
+            document.getElementById('summary-vat').textContent = vatAmount.toLocaleString('fr-FR', {maximumFractionDigits: 2}) + '€';
+            document.getElementById('summary-ttc').textContent = ttc.toLocaleString('fr-FR', {maximumFractionDigits: 2}) + '€';
+        };
+
+        // Update automatically the listeners
+        ['invoice-quantity', 'invoice-amount', 'invoice-vat'].forEach(id => {
+            document.getElementById(id).addEventListener('input', updateSummary);
+        });
+        updateSummary();
 
         document.getElementById('invoice-client').addEventListener('change', (e) => {
             const clientId = parseInt(e.target.value);
@@ -1602,10 +1665,6 @@ class FreelanceERP {
         }
     }
 
-    // printInvoice(id) {
-    //     //this.showToast('Fonction d\'impression simulée - Facture prête à imprimer', 'info');
-    // }
-
 
     printInvoice(id) {
         const invoice = this.data.invoices.find(i => i.id === id);
@@ -1613,146 +1672,104 @@ class FreelanceERP {
             this.showToast('Facture introuvable', 'error');
             return;
         }
+        const templateName = invoice.invoiceTemplate || 'standard';
+        this.printInvoiceHTML(id, templateName);
+    }
+    
 
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF('p', 'mm', 'a4');
+    async  printInvoiceHTML(invoiceId, templateName = 'standard') {
+        const invoice = this.data.invoices.find(i => i.id === invoiceId);
+        if (!invoice) {
+            this.showToast('Facture introuvable', 'error');
+            return;
+        }
 
-        // --- Entreprise émettrice ---
+        const client = this.data.clients.find(c => c.id === invoice.clientId);
+        const mission = this.data.missions.find(m => m.id === invoice.missionId);
         const company = this.company || {};
 
-        // --- Client ---
-        const client = this.data.clients.find(c => c.id === invoice.clientId) || {
-            name: "Nom Client",
-            address: "Adresse Client"
+        if (!client || !mission) {
+            this.showToast('Client ou mission introuvable', 'error');
+            return;
+        }
+
+        // prepare data for template
+        const templateData = {
+            company: {
+                name: company.name || '',
+                address: (company.address || '').replace(/\n/g, '<br>'),
+                email: company.email || '',
+                phone: company.phone || '',
+                siret: company.siret || '',
+                tva_id: company.tva_id || '',
+                nda: company.nda || '',
+                iban: company.iban || ''
+            },
+            client: {
+                company: client.company || '',
+                siren: client.siren || '',
+                address: (client.billingAddress || client.address || '').replace(/\n/g, '<br>'),
+                contact: {
+                    name: client.contact?.name || '',
+                    email: client.contact?.email || '',
+                    phone: client.contact?.phone || ''
+                }
+            },
+            mission: {
+                title: mission.title || '',
+                description: mission.description || '',
+                dailyRate: (mission.dailyRate || 0).toFixed(2)
+            },
+            invoice: {
+                number: invoice.number || '',
+                date: invoice.date || '',
+                dueDate: invoice.dueDate || '',
+                quantity: invoice.quantity || 1,
+                amountHT: (invoice.amount || 0).toFixed(2),
+                activityMonth: `${invoice.activityMonth}`,
+                vatRate: invoice.vatRate || 20,
+                
+                // Optionnels : frais et astreinte (si nécessaire)
+                showTransportFees: false,
+                transportFees: 0,
+                showStandby: false,
+                standbyHours: 0,
+                standbyRate: 0,
+                standbyAmount: 0,
+                
+                // Calculs
+                subtotalHT: (invoice.amount || 0).toFixed(2),
+                vatAmount: ((invoice.amount || 0) * ((invoice.vatRate || 0) / 100)).toFixed(2),
+                totalTTC: ((invoice.amount || 0) * (1 + (invoice.vatRate || 0) / 100)).toFixed(2)
+            }
         };
 
-        // --- Position initiale ---
-        const startX = 20;
-        let y = 20;
-        const offset = 6;
-
-        // --- Bloc entreprise ---
-        doc.setFontSize(16);
-        doc.setFont("helvetica", "bold");
-        doc.text(String(company.name || ""), startX, y);
-
-        doc.setFontSize(10);
-        doc.setFont("helvetica", "normal");
-
-        const companyLines = [
-            company.address,
-            company.phone,
-            company.email,
-            company.siret
-        ];
-
-        companyLines.forEach(line => {
-            if (line) {
-                y += offset;
-                doc.text(String(line), startX, y);
-            }
-        });
-
-        // --- Bloc facture (droite) ---
-        const rightX = 150;
-        let yRight = 20;
-        doc.setFont("helvetica", "bold");
-        doc.text(`Facture N°: ${String(invoice.number || "")}`, rightX, yRight);
-        yRight += offset;
-        doc.setFont("helvetica", "normal");
-        doc.text(`Date: ${String(invoice.date || "")}`, rightX, yRight);
-        yRight += offset;
-        doc.text(`Date d'échéance: ${String(invoice.dueDate || "")}`, rightX, yRight);
-
-        // --- Bloc client ---
-        y += 15;
-        doc.setFont("helvetica", "bold");
-        doc.text("Client :", startX, y);
-        y += offset;
-        doc.setFont("helvetica", "normal");
-        doc.text(String(client.name || ""), startX, y);
-        y += offset;
-        (client.address || "").split("\n").forEach(line => {
-            if (line) {
-                y += offset;
-                doc.text(String(line), startX, y);
-            }
-        });
-
-        // --- Bloc mission ---
-        const missionForInvoice = this.data.missions.find(m => m.id === invoice.missionId);
-        if (missionForInvoice) {
-            y += 12;
-            doc.setFont("helvetica", "bold");
-            doc.text("Mission :", startX, y);
-            y += offset;
-            doc.setFont("helvetica", "normal");
-            doc.text(String(missionForInvoice.title || ""), startX, y);
-            if (missionForInvoice.description) {
-                const descLines = doc.splitTextToSize(String(missionForInvoice.description), 170);
-                descLines.forEach(line => {
-                    y += offset;
-                    doc.text(line, startX, y);
-                });
-            }
+        // Select the template template
+        const template = INVOICE_TEMPLATES[templateName] || INVOICE_TEMPLATES.standard;
+        if (!template) {
+            this.showToast('Template non trouvé', 'error');
+            return;
         }
 
-        // --- Tableau items / ligne principale ---
-        y += 15;
-        const tableColumns = ["LIBELLE", "Qté", "P.U", "TOTAL"];
-        let tableRows = [];
+        // Generate the HTML data with substitutions
+        const html = substituteTemplate(template, templateData);
 
-        if (invoice.items && Array.isArray(invoice.items) && invoice.items.length > 0) {
-            tableRows = invoice.items.map(item => [
-                String(item.description || ""),
-                String(item.quantity || 1),
-                item.price !== undefined ? item.price.toFixed(2) + " €" : "-",
-                item.total !== undefined ? item.total.toFixed(2) + " €" : ((item.quantity||1)*(item.price||0)).toFixed(2) + " €"
-            ]);
+        // Convert to PDF with  html2pdf
+        const opt = {
+            margin: 10,
+            filename: `${invoice.number}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2 },
+            jsPDF: { orientation: 'p', unit: 'mm', format: 'a4' }
+        };
+
+        // Ensure that html2pdf is loadeded
+        if (typeof html2pdf !== 'undefined') {
+            html2pdf().set(opt).from(html).save();
         } else {
-            tableRows = [
-                [`Facture ${String(invoice.number || "")}`, "1", (invoice.amount || 0).toFixed(2) + " €", (invoice.amount || 0).toFixed(2) + " €"]
-            ];
+            this.showToast('Bibliothèque html2pdf non chargée', 'error');
         }
-
-        // --- Totaux ---
-        const amountHT = invoice.amount || 0;
-        const vatRate = invoice.vatRate || 0;
-        const amountTVA = amountHT * (vatRate / 100);
-        const totalTTC = amountHT + amountTVA;
-
-        tableRows.push(["", "", "Total HT", amountHT.toFixed(2) + " €"]);
-        tableRows.push(["", "", `TVA ${vatRate}%`, amountTVA.toFixed(2) + " €"]);
-        tableRows.push(["", "", "Total TTC", totalTTC.toFixed(2) + " €"]);
-
-        doc.autoTable({
-            startY: y,
-            head: [tableColumns],
-            body: tableRows,
-            theme: 'grid',
-            headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-            styles: { fontSize: 10 }
-        });
-
-        // --- Pied de page ---
-        const finalY = doc.lastAutoTable.finalY || y + 40;
-        doc.setFontSize(10);
-        const footerLines = [
-            company.tva_value ? `TVA: ${String(company.tva_value)}` : '',
-            company.nda ? `NDA: ${String(company.nda)}` : '',
-            company.iban ? `IBAN: ${String(company.iban)}` : ''
-        ].filter(Boolean);
-        if (footerLines.length) {
-            doc.text(footerLines.join('   '), startX, finalY + 10);
-        }
-
-        // --- Télécharger le PDF ---
-        const dateForName = (invoice.date || new Date().toISOString().split('T')[0]).split('-');
-        const fileName = `${dateForName[2]}-${dateForName[1]}-facture.pdf`;
-        doc.save(fileName);
     }
-
-// fin invoice
 
     generateInvoiceNumber() {
         const now = new Date();
@@ -1903,10 +1920,13 @@ class FreelanceERP {
         const formData = {
             number: document.getElementById('invoice-number').value,
             date: document.getElementById('invoice-date').value,
+            activityMonth: document.getElementById('invoice-activity-month').value,
             clientId: parseInt(document.getElementById('invoice-client').value),
             missionId: parseInt(document.getElementById('invoice-mission').value),
+            quantity: parseFloat(document.getElementById('invoice-quantity').value),
             amount: parseFloat(document.getElementById('invoice-amount').value),
             vatRate: parseFloat(document.getElementById('invoice-vat').value),
+            invoiceTemplate: document.getElementById('invoice-template').value,
             status: document.getElementById('invoice-status').value,
             dueDate: document.getElementById('invoice-due-date').value,
             paidDate: document.getElementById('invoice-paid-date').value || null
@@ -1946,7 +1966,7 @@ class FreelanceERP {
             phone: document.getElementById('comp-phone').value,
             email: document.getElementById('comp-email').value,
             siret: document.getElementById('comp-siret').value,
-            tva_value: document.getElementById('comp-tva').value,
+            tva_id: document.getElementById('comp-tva').value,
             nda: document.getElementById('comp-nda').value,
             iban: document.getElementById('comp-iban').value
         };
