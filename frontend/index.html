@@ -9,8 +9,8 @@
 </head>
 <body>
     <div class="app-container">
-        <!-- Navigation -->
-        <nav class="sidebar">
+    <!-- Navigation -->
+    <nav id="sidebar" class="sidebar">
             <div class="sidebar-header">
                 <h2><i class="fas fa-briefcase"></i> FreelanceERP</h2>
             </div>
@@ -25,10 +25,17 @@
             </ul>
         </nav>
 
+    <!-- Backdrop for mobile sidebar -->
+    <div class="sidebar-backdrop" id="sidebar-backdrop" aria-hidden="true"></div>
+
         <!-- Main Content -->
         <main class="main-content">
             <header class="header">
                 <div class="header-content">
+                    <!-- Mobile menu toggle -->
+                    <button id="mobile-menu-btn" class="btn btn--outline mobile-menu-btn" aria-label="Ouvrir le menu">
+                        <i class="fas fa-bars"></i>
+                    </button>
                     <h1 id="page-title">Tableau de bord</h1>
                     <div class="header-actions">
                         <button class="btn btn--primary" id="quick-action-btn">
@@ -383,6 +390,40 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="invoice-template.js"></script>
     <script src="app.js"></script>
+    <script>
+        (function(){
+            const btn = document.getElementById('mobile-menu-btn');
+            const backdrop = document.getElementById('sidebar-backdrop');
+            const sidebar = document.querySelector('.sidebar');
+            function openSidebar() {
+                document.body.classList.add('sidebar-open');
+                if (btn) btn.setAttribute('aria-expanded', 'true');
+                if (backdrop) backdrop.setAttribute('aria-hidden', 'false');
+                if (sidebar) sidebar.setAttribute('aria-hidden', 'false');
+                // focus first nav link for keyboard users
+                const first = document.querySelector('.nav-link');
+                if (first) first.focus();
+            }
+            function closeSidebar() {
+                document.body.classList.remove('sidebar-open');
+                if (btn) btn.setAttribute('aria-expanded', 'false');
+                if (backdrop) backdrop.setAttribute('aria-hidden', 'true');
+                if (sidebar) sidebar.setAttribute('aria-hidden', 'true');
+                if (btn) btn.focus();
+            }
+            if (btn) {
+                btn.setAttribute('aria-expanded', 'false');
+                btn.setAttribute('aria-controls', 'sidebar');
+                btn.addEventListener('click', () => { if (document.body.classList.contains('sidebar-open')) closeSidebar(); else openSidebar(); });
+            }
+            if (backdrop) backdrop.addEventListener('click', closeSidebar);
+            document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSidebar(); });
+            // close after clicking a nav link to reveal main content
+            document.querySelectorAll('.nav-link').forEach(a => a.addEventListener('click', () => { closeSidebar(); }));
+            // set initial aria-hidden on sidebar
+            if (sidebar) sidebar.setAttribute('aria-hidden', 'true');
+        })();
+    </script>
 
 
 </body>

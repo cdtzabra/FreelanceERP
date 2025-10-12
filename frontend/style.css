@@ -884,6 +884,17 @@ select.form-control {
   align-items: center;
 }
 
+/* Mobile menu button (hidden on larger screens) */
+.mobile-menu-btn {
+  display: none;
+  margin-right: 12px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+}
+.mobile-menu-btn i { font-size: 1rem; }
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -1417,6 +1428,69 @@ select.form-control {
   }
 }
 
+/* Small screens: make sidebar overlay and scrollable, main content full width */
+@media (max-width: 900px) {
+  .mobile-menu-btn { display: inline-flex; align-items: center; justify-content: center; }
+
+  /* Sidebar becomes an overlay panel */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 280px;
+    max-width: 80%;
+    transform: translateX(-110%);
+    transition: transform 220ms ease-in-out;
+  z-index: 2000;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.25);
+    background: var(--color-surface);
+  }
+
+  /* visible state when body has .sidebar-open */
+  body.sidebar-open .sidebar {
+    transform: translateX(0);
+  }
+
+  /* Add a backdrop when sidebar is open */
+  .sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+  z-index: 1990;
+    transition: opacity 200ms ease-in-out;
+    opacity: 0;
+  }
+  body.sidebar-open .sidebar-backdrop { display: block; opacity: 1; }
+
+  /* Main content should take full width when sidebar overlayed */
+  .main-content {
+    margin-left: 0 !important;
+    width: 100%;
+  }
+
+  /* Slightly increase header z for hamburger */
+  .header { position: relative; z-index: 1300; }
+
+  /* Ensure nav menu stacks vertically inside the overlayed sidebar */
+  .sidebar .nav-menu {
+    display: block;
+    padding: 8px 0;
+  }
+  .sidebar .nav-menu li {
+    margin: 0 0 var(--space-8) 0;
+  }
+  .sidebar .nav-menu .nav-link {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: var(--space-12) var(--space-16);
+  }
+}
+
 /* Header actions responsive */
 .header-actions {
   display: flex;
@@ -1447,16 +1521,21 @@ select.form-control {
 }
 @media (max-width: 768px) {
   .sidebar {
-      width: 180px;
-      position: fixed;
-      left: 0;
-      top: 0;
-      height: 100%;
-      overflow-y: auto;
-      z-index: 1000;
+    width: 180px;
+    position: fixed;
+    left: 0;
+    top: 0;
+    height: 100%;
+    overflow-y: auto;
+    /* overlay behavior: hidden by default via transform, shown when body.sidebar-open */
+    transform: translateX(-110%);
+    transition: transform 220ms ease-in-out;
+    z-index: 2000;
+    background: var(--color-surface);
   }
+  body.sidebar-open .sidebar { transform: translateX(0); }
   .main-content {
-      margin-left: 180px;
+    margin-left: 0;
   }
 }
 
