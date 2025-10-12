@@ -1071,7 +1071,9 @@ select.form-control {
   background-color: var(--color-surface);
   border: 1px solid var(--color-card-border);
   border-radius: var(--radius-lg);
-  overflow: hidden;
+  /* Allow horizontal scrolling on small screens so tables don't get clipped */
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
   box-shadow: var(--shadow-sm);
 }
 
@@ -1253,8 +1255,24 @@ select.form-control {
 
 .modal-body {
   padding: var(--space-20);
-  overflow-y: auto;
+  /* allow both vertical and horizontal scrolling inside modal body */
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
   flex: 1;
+}
+
+/* Responsive adjustments: ensure modal and tables behave well on small screens */
+@media (max-width: 880px) {
+  .modal-content {
+    width: 98%;
+    max-width: 98%;
+    max-height: 98%;
+    border-radius: 8px;
+  }
+  .modal-body { padding: 12px; }
+  /* Force tables to be scrollable horizontally and give them a reasonable min width */
+  .table-container { overflow-x: auto; }
+  .data-table { min-width: 720px; }
 }
 
 .modal-footer {
