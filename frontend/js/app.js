@@ -7,6 +7,7 @@ class FreelanceERP {
             missions: [],
             invoices: [],
             cras: [],
+            operations: [],
             company: {  // <-- AJOUT
                 name: '',
                 address: '',
@@ -156,6 +157,9 @@ class FreelanceERP {
                     if (!importedData.data.cras) {
                         importedData.data.cras = [];
                     }
+                    if (!importedData.data.operations) {
+                        importedData.data.operations = [];
+                    }
 
                     if (confirm('Voulez-vous remplacer toutes les données existantes ou les fusionner ?\n\nOK = Remplacer\nAnnuler = Fusionner')) {
                         this.data = importedData.data;
@@ -274,6 +278,14 @@ class FreelanceERP {
                 this.data.cras.push(newCra);
             });
         }
+        if (importedData.operations) {
+            const maxOpId = Math.max(0, ...this.data.operations.map(o => o.id || 0));
+            importedData.operations.forEach((op, index) => {
+                const newOp = { ...op, id: maxOpId + index + 1 };
+                if (!this.data.operations) this.data.operations = [];
+                this.data.operations.push(newOp);
+            });
+        }
     }
 
 
@@ -299,22 +311,6 @@ class FreelanceERP {
         }
     }
 
-    // loadCompanyConfig() {
-    //     try {
-    //         const raw = localStorage.getItem('freelanceERPCompany');
-    //         if (raw) {
-    //             const v = JSON.parse(raw);
-    //             this.company = { ...this.company, ...v };
-    //         }
-    //     } catch (_) { /* ignore */ }
-    // }
-
-    // saveCompanyConfig() {
-    //     localStorage.setItem('freelanceERPCompany', JSON.stringify(this.company));
-    //     this.renderCompanyInfo();
-    //     this.renderCompanyHeader();
-    //     this.renderCharts();
-    // }
 
     loadBackendConfig() {
         try {
@@ -426,8 +422,9 @@ class FreelanceERP {
             if (!res.ok) throw new Error('HTTP ' + res.status);
             const payload = await res.json();
             if (payload && payload.data) {
-                // Ensure cras exists
+                // Ensure cras and operations exist
                 if (!payload.data.cras) payload.data.cras = [];
+                if (!payload.data.operations) payload.data.operations = [];
                 this.data = payload.data;
                 // CORRECTION: Mettre à jour immédiatement l'affichage
                 this.updateDashboard();
@@ -493,6 +490,9 @@ class FreelanceERP {
         document.getElementById('add-mission-btn').addEventListener('click', () => this.showMissionForm());
         document.getElementById('add-invoice-btn').addEventListener('click', () => this.showInvoiceForm());
         document.getElementById('add-cra-btn').addEventListener('click', () => this.showCRAForm());
+    // Operations
+    const addOpBtn = document.getElementById('add-operation-btn');
+    if (addOpBtn) addOpBtn.addEventListener('click', () => this.showOperationForm());
 
         document.getElementById('modal-close').addEventListener('click', () => this.closeModal());
         document.getElementById('modal-cancel').addEventListener('click', () => this.closeModal());
@@ -555,6 +555,9 @@ class FreelanceERP {
                 break;
             case 'invoices':
                 this.renderInvoices();
+                break;
+            case 'operations':
+                this.showOperationsPage();
                 break;
             case 'settings':
                 this.renderSettings();
@@ -833,6 +836,7 @@ class FreelanceERP {
                 options: { responsive: true, scales: { y: { beginAtZero: true } } }
             });
         }
+        
     }
 
     renderGeneratedRevenueByMonth() {
@@ -946,6 +950,240 @@ class FreelanceERP {
                 </div>
             `;
         }).join('');
+    }
+
+    /* -------------------------
+    Operations
+    ------------------------- */
+    showOperationsPage() {
+        // populate year filter
+        const yearSelect = document.getElementById('operation-year-filter');
+        if (yearSelect) {
+            const years = this.getAvailableYears();
+            yearSelect.innerHTML = '<option value="">Toutes les années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+            yearSelect.value = this.globalYear || '';
+            yearSelect.addEventListener('change', (e) => { this.globalYear = e.target.value || null; this.renderOperations(); this.renderCharts(); this.updateYearBadge(); });
+        }
+
+        // set up type/sort listeners once
+        if (!this._opsListenersInitialized) {
+            const typeFilter = document.getElementById('operation-type-filter');
+            const sortEl = document.getElementById('operation-sort');
+            if (typeFilter) typeFilter.addEventListener('change', () => { this.renderOperations(); });
+            if (sortEl) sortEl.addEventListener('change', () => { this.renderOperations(); });
+            this._opsListenersInitialized = true;
+        }
+
+        // render data for the operations page
+        this.renderOperations();
+    }
+
+    renderOperations() {
+        const selectedYear = this.getSelectedYear();
+        const opsRaw = (this.data.operations || []);
+        const opsByYear = opsRaw.filter(op => {
+            if (!selectedYear) return true;
+            if (!op.date) return false;
+            return (op.date.slice(0,4) === selectedYear);
+        });
+
+        const typeFilter = document.getElementById('operation-type-filter');
+        const typeVal = typeFilter ? (typeFilter.value || '') : '';
+        const opsFiltered = typeVal ? opsByYear.filter(o => o.type === typeVal) : opsByYear;
+
+        const sortEl = document.getElementById('operation-sort');
+        const sortVal = sortEl ? (sortEl.value || 'date_desc') : 'date_desc';
+        const ops = opsFiltered.slice().sort((a,b) => {
+            switch (sortVal) {
+                case 'date_asc': return new Date(a.date || 0) - new Date(b.date || 0);
+                case 'date_desc': return new Date(b.date || 0) - new Date(a.date || 0);
+                case 'amount_asc': return (a.amount || 0) - (b.amount || 0);
+                case 'amount_desc': return (b.amount || 0) - (a.amount || 0);
+                default: return new Date(b.date || 0) - new Date(a.date || 0);
+            }
+        });
+
+        const tbody = document.getElementById('operations-table-body');
+        if (!tbody) return;
+        tbody.innerHTML = ops.map(op => {
+            const cls = {
+                payment: 'op-payment', salary: 'op-salary', vat: 'op-vat', tax: 'op-tax', urssaf: 'op-urssaf', other: 'op-other'
+            }[op.type] || 'op-other';
+            // Display payments as positive; all other operation types are treated as expenses (display negative)
+            const isPayment = op.type === 'payment';
+            const rawAmount = Number(op.amount || 0);
+            const displayAmount = isPayment ? rawAmount : -Math.abs(rawAmount);
+            const amt = Math.abs(displayAmount).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const sign = displayAmount < 0 ? '-' : '+';
+            const amountClass = `amount ${displayAmount < 0 ? 'negative' : ''}`;
+            return `
+                <tr>
+                    <td><span class="op-badge ${cls}">${op.type}</span></td>
+                    <td>${op.date || ''}</td>
+                    <td class="${amountClass}">${sign}${amt} €</td>
+                    <td>${op.note || ''}</td>
+                    <td>
+                        <div class="action-buttons">
+                            <button class="btn-icon btn-icon--edit" onclick="app.showOperationForm(${op.id})" title="Modifier"><i class="fas fa-edit"></i></button>
+                            <button class="btn-icon btn-icon--delete" onclick="app.deleteOperation(${op.id})" title="Supprimer"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('') || '<tr><td colspan="5" style="text-align:center;">Aucune opération</td></tr>';
+
+        // Summary: totals by type (percentages relative to total revenue for the selected year)
+        const summaryEl = document.getElementById('operations-summary-body');
+        if (summaryEl) {
+            // compute totals by type
+            const totals = {};
+            for (const o of ops) { totals[o.type] = (totals[o.type] || 0) + (o.amount || 0); }
+
+            const paymentTotalTTC = totals['payment'] || 0;
+
+            // Determine payment base in HT when possible (use linked invoices for correct HT calculation)
+            let paymentBaseHT = 0;
+            for (const o of ops.filter(x => x.type === 'payment')) {
+                if (o.note) {
+                    const inv = (this.data.invoices || []).find(i => i.number === o.note);
+                    if (inv && typeof inv.amount === 'number') {
+                        paymentBaseHT += Number(inv.amount || 0);
+                        continue;
+                    }
+                }
+                // fallback: if we don't have an invoice, we cannot reliably extract HT - use TTC as a fallback
+                paymentBaseHT += Number(o.amount || 0);
+            }
+            if (!paymentBaseHT && paymentTotalTTC) paymentBaseHT = paymentTotalTTC;
+
+            // non-payment types
+            const nonPaymentKeys = Object.keys(totals).filter(k => k !== 'payment');
+
+            // compute expense magnitudes for non-payment types (ensure positive numbers for display)
+            const nonPaymentTotals = nonPaymentKeys.map(k => ({ key: k, val: Math.abs(totals[k] || 0) }));
+
+            // If we have a reliable HT base derived from invoices (paymentBaseHT > 0),
+            // VAT should not be subtracted from that HT base (VAT is already derived from HT).
+            // In that case we will exclude 'vat' from the expense total and net calculation,
+            // but still display the VAT row with percentage relative to paymentBaseHT.
+            let sumExpenses = 0;
+            if (paymentBaseHT > 0) {
+                sumExpenses = nonPaymentTotals.filter(it => it.key !== 'vat').reduce((s, it) => s + it.val, 0);
+            } else {
+                // No HT base available — use TTC base (paymentTotalTTC) and include VAT in expenses
+                sumExpenses = nonPaymentTotals.reduce((s, it) => s + it.val, 0);
+            }
+
+            // Build rows: format each type; VAT row is shown but excluded from sum/net when HT base is used
+            const rows = nonPaymentTotals.map(it => {
+                const pctBase = paymentBaseHT > 0 ? paymentBaseHT : (paymentTotalTTC || 1);
+                const pct = pctBase ? ((it.val / pctBase) * 100).toFixed(1) : '0.0';
+                const displayPrefix = (paymentBaseHT > 0 && it.key === 'vat') ? '' : '-';
+                return `<div><strong>${it.key}:</strong> ${displayPrefix}${it.val.toLocaleString('fr-FR', {minimumFractionDigits:2})} € (${pct}% ${paymentBaseHT > 0 ? 'des paiements HT' : 'du total TTC'})</div>`;
+            }).join('');
+
+            const net = (paymentBaseHT > 0 ? paymentBaseHT : paymentTotalTTC) - sumExpenses;
+
+            summaryEl.innerHTML = `
+                <div><br></div>
+                <div><strong>Paiements TTC (Encaissés):</strong> ${paymentTotalTTC.toLocaleString('fr-FR', {minimumFractionDigits:2})} €</div>
+                <div><strong>Paiements HT (Base De Calcul):</strong> ${paymentBaseHT.toLocaleString('fr-FR', {minimumFractionDigits:2})} €</div>
+                <div><strong>Dépenses Totales:</strong> -${sumExpenses.toLocaleString('fr-FR', {minimumFractionDigits:2})} €</div>
+                <div><strong>Solde Disponible (HT Base):</strong> ${net.toLocaleString('fr-FR', {minimumFractionDigits:2})} €</div>
+                <div><br></div>
+                <div><strong>Détail des Dépenses:</strong></div>
+                ${rows}
+            `;
+
+            // render chart for non-payment breakdown (inside operations page)
+            try {
+                const chartEl = document.getElementById('operations-chart');
+                if (chartEl && window.Chart) {
+                    const labels = nonPaymentTotals.map(it => it.key);
+                    const data = nonPaymentTotals.map(it => it.val);
+                    const colors = labels.map(l => ({ salary: 'rgba(34,197,94,0.8)', vat: 'rgba(245,158,11,0.8)', tax: 'rgba(231,76,60,0.8)', urssaf: 'rgba(168,75,47,0.8)', other: 'rgba(107,33,168,0.8)' }[l] || 'rgba(120,120,120,0.8)'));
+                    if (this._operationsChart) this._operationsChart.destroy();
+                    // Constrain chart to stay within the operations card; allow Chart.js to resize responsively
+                    this._operationsChart = new Chart(chartEl, { 
+                        type: labels.length <= 1 ? 'bar' : 'pie', 
+                        data: { labels, datasets: [{ data, backgroundColor: colors }] }, 
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+                    });
+                }
+            } catch (e) { /* ignore chart errors */ }
+        }
+    }
+
+    
+
+    showOperationForm(opId = null) {
+        const op = opId ? (this.data.operations || []).find(o => o.id === opId) : null;
+        document.getElementById('modal-title').textContent = op ? 'Modifier l\'opération' : 'Nouvelle opération';
+        document.getElementById('modal-body').innerHTML = `
+            <form id="operation-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Type</label>
+                        <select id="op-type" class="form-control">
+                            <option value="payment" ${op && op.type === 'payment' ? 'selected' : ''}>paiement</option>
+                            <option value="salary" ${op && op.type === 'salary' ? 'selected' : ''}>rémunération</option>
+                            <option value="vat" ${op && op.type === 'vat' ? 'selected' : ''}>tva</option>
+                            <option value="tax" ${op && op.type === 'tax' ? 'selected' : ''}>impot</option>
+                            <option value="urssaf" ${op && op.type === 'urssaf' ? 'selected' : ''}>urssaf</option>
+                            <option value="other" ${op && op.type === 'other' ? 'selected' : ''}>autre</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Date</label>
+                        <input type="date" id="op-date" class="form-control" value="${op ? op.date : ''}" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Montant</label>
+                        <input type="number" id="op-amount" class="form-control" step="0.01" value="${op ? op.amount : ''}" required>
+                    </div>
+                </div>
+                <div class="form-row full-width">
+                    <div class="form-group">
+                        <label class="form-label">Note</label>
+                        <input type="text" id="op-note" class="form-control" value="${op ? (op.note || '') : ''}">
+                    </div>
+                </div>
+            </form>
+        `;
+        this.currentFormType = 'operation';
+        this.currentEditItem = op;
+        this.showModal();
+    }
+
+    saveOperation() {
+        const formData = {
+            type: document.getElementById('op-type').value,
+            date: document.getElementById('op-date').value,
+            amount: parseFloat(document.getElementById('op-amount').value) || 0,
+            note: document.getElementById('op-note').value
+        };
+        if (!this.data.operations) this.data.operations = [];
+        if (this.currentEditItem) {
+            // update
+            const idx = this.data.operations.findIndex(o => o.id === this.currentEditItem.id);
+            if (idx !== -1) this.data.operations[idx] = { ...this.data.operations[idx], ...formData };
+        } else {
+            const nid = Math.max(0, ...this.data.operations.map(o => o.id || 0)) + 1;
+            this.data.operations.push({ id: nid, ...formData });
+        }
+        this.saveData();
+        this.closeModal();
+        this.renderOperations();
+    }
+
+    deleteOperation(id) {
+        if (!confirm('Êtes-vous sûr de vouloir supprimer cette opération ?')) return;
+        this.data.operations = (this.data.operations || []).filter(o => o.id !== id);
+        this.saveData();
+        this.renderOperations();
+        this.showToast('Opération supprimée', 'success');
     }
 
     renderClients() {
@@ -1684,7 +1922,12 @@ class FreelanceERP {
 
     deleteInvoice(id) {
         if (confirm('Êtes-vous sûr de vouloir supprimer cette facture ?')) {
+            const inv = this.data.invoices.find(i => i.id === id);
             this.data.invoices = this.data.invoices.filter(i => i.id !== id);
+            // If it was paid, remove corresponding payment operation
+            if (inv && inv.status === 'Payée' && this.data.operations) {
+                this.data.operations = this.data.operations.filter(o => !(o.type === 'payment' && o.note === inv.number));
+            }
             this.saveData();
             this.renderInvoices();
             this.showToast('Facture supprimée avec succès', 'success');
@@ -1859,6 +2102,9 @@ class FreelanceERP {
             case 'cra':
                 this.saveCRA();
                 break;
+            case 'operation':
+                this.saveOperation();
+                break;
             case 'invoice':
                 this.saveInvoice();
                 break;
@@ -1969,8 +2215,11 @@ class FreelanceERP {
             paidDate: document.getElementById('invoice-paid-date').value || null
         };
 
+        // remember previous status if editing
+        let prevInvoice = null;
         if (this.currentEditItem) {
             const index = this.data.invoices.findIndex(i => i.id === this.currentEditItem.id);
+            prevInvoice = this.data.invoices[index];
             this.data.invoices[index] = { ...this.currentEditItem, ...formData };
         } else {
             // assign a unique id first
@@ -1993,6 +2242,38 @@ class FreelanceERP {
         if (!ok) {
             this.showToast('Enregistrement non sauvegardé sur le serveur. Vérifiez la connexion.', 'error');
             return;
+        }
+
+        // After saving invoice, handle payment operation synchronization
+        try {
+            const savedInvoice = this.currentEditItem ? this.data.invoices.find(i => i.id === this.currentEditItem.id) : this.data.invoices.find(i => i.number === formData.number);
+            const wasPaid = prevInvoice ? (prevInvoice.status === 'Payée') : false;
+            const isPaid = savedInvoice && savedInvoice.status === 'Payée';
+            // compute amount TTC consistent with dashboard (amount * (1 + vatRate/100))
+            const ttc = (savedInvoice.amount || 0) * (1 + (savedInvoice.vatRate || 0) / 100);
+
+            if (!this.data.operations) this.data.operations = [];
+
+            if (isPaid && !wasPaid) {
+                // create payment operation
+                const nid = Math.max(0, ...this.data.operations.map(o => o.id || 0)) + 1;
+                this.data.operations.push({ id: nid, type: 'payment', date: savedInvoice.paidDate || savedInvoice.date || new Date().toISOString().split('T')[0], amount: ttc, note: savedInvoice.number });
+                await this.saveData();
+            } else if (!isPaid && wasPaid) {
+                // remove payment operation matching invoice number
+                this.data.operations = this.data.operations.filter(o => !(o.type === 'payment' && o.note === prevInvoice.number));
+                await this.saveData();
+            } else if (isPaid && wasPaid) {
+                // update existing payment operation amount/date if changed
+                const op = this.data.operations.find(o => o.type === 'payment' && o.note === savedInvoice.number);
+                if (op) {
+                    op.amount = ttc;
+                    op.date = savedInvoice.paidDate || savedInvoice.date || op.date;
+                    await this.saveData();
+                }
+            }
+        } catch (e) {
+            console.error('Failed to sync operations after invoice save', e);
         }
 
         this.renderInvoices();

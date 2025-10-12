@@ -79,7 +79,7 @@ async function main() {
     app.get('/api/data', requireApiKey, async (req, res) => {
         try {
             const row = await db.get('SELECT payload, updated_at FROM data_store WHERE api_key = ?', req.apiKey);
-            if (!row) return res.json({ data: { clients: [], missions: [], invoices: [], cras: [], company: {} }, updatedAt: null });
+            if (!row) return res.json({ data: { clients: [], missions: [], invoices: [], cras: [], operations: [], company: {} }, updatedAt: null });
             let payload;
             try {
                 payload = JSON.parse(row.payload);
@@ -88,7 +88,7 @@ async function main() {
                     payload.company = {};
                 }
             } catch (_) {
-                payload = { clients: [], missions: [], invoices: [], cras: [], company: {} };
+                payload = { clients: [], missions: [], invoices: [], cras: [], operations: [], company: {} };
             }
             res.json({ data: payload, updatedAt: row.updated_at });
         } catch (e) {

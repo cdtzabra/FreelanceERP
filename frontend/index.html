@@ -20,12 +20,13 @@
                 <li><a href="#" data-page="missions" class="nav-link"><i class="fas fa-tasks"></i> Missions</a></li>
                 <li><a href="#" data-page="cra" class="nav-link"><i class="fas fa-calendar-check"></i> CRA</a></li>
                 <li><a href="#" data-page="invoices" class="nav-link"><i class="fas fa-file-invoice"></i> Factures</a></li>
+                <li><a href="#" data-page="operations" class="nav-link"><i class="fas fa-exchange-alt"></i> Operations</a></li>
                 <li><a href="#" data-page="settings" class="nav-link"><i class="fas fa-cog"></i> Paramètres</a></li>
 
             </ul>
         </nav>
 
-    <!-- Backdrop for mobile sidebar -->
+    
     <div class="sidebar-backdrop" id="sidebar-backdrop" aria-hidden="true"></div>
 
         <!-- Main Content -->
@@ -320,6 +321,61 @@
                     </table>
                 </div>
             </div>
+            <!-- Operations Page -->
+            <div id="operations-page" class="page">
+                <div class="page-header">
+                    <div class="page-filters">
+                        <select id="operation-year-filter" class="form-control">
+                            <option value="">Toutes les années</option>
+                        </select>
+                        <!-- <label for="operation-type-filter" style="margin-left:8px; color:var(--color-text-secondary);">Type</label> -->
+                        <select id="operation-type-filter" class="form-control">
+                            <option value="">Tous les types</option>
+                            <option value="payment">paiement</option>
+                            <option value="salary">rémunération</option>
+                            <option value="vat">tva</option>
+                            <option value="tax">impot</option>
+                            <option value="urssaf">urssaf</option>
+                            <option value="other">autre</option>
+                        </select>
+                        <!-- <label for="operation-sort" style="margin-left:8px; color:var(--color-text-secondary);">Trier</label> -->
+                        <select id="operation-sort" class="form-control">
+                            <option value="date_desc">Date (récent)</option>
+                            <option value="date_asc">Date (ancien)</option>
+                            <option value="amount_desc">Montant (décroissant)</option>
+                            <option value="amount_asc">Montant (croissant)</option>
+                        </select>
+                    </div>
+                    <div class="page-actions">
+                        <button class="btn btn--primary" id="add-operation-btn">
+                            <i class="fas fa-plus"></i> Nouvelle opération
+                        </button>
+                    </div>
+                </div>
+                <div class="operations-summary card">
+                        <h3>Résumé des opérations</h3>
+                        <div class="operations-summary__inner">
+                            <div id="operations-summary-body" class="operations-summary__body">Aucune donnée</div>
+                            <div class="operations-summary__chart">
+                                <canvas id="operations-chart" height="120"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Date</th>
+                                <th>Montant</th>
+                                <th>Note</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="operations-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
             <!-- Settings Page -->
             <div id="settings-page" class="page">
                 <h2>Paramètres</h2>
@@ -388,43 +444,9 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <script src="invoice-template.js"></script>
-    <script src="app.js"></script>
-    <script>
-        (function(){
-            const btn = document.getElementById('mobile-menu-btn');
-            const backdrop = document.getElementById('sidebar-backdrop');
-            const sidebar = document.querySelector('.sidebar');
-            function openSidebar() {
-                document.body.classList.add('sidebar-open');
-                if (btn) btn.setAttribute('aria-expanded', 'true');
-                if (backdrop) backdrop.setAttribute('aria-hidden', 'false');
-                if (sidebar) sidebar.setAttribute('aria-hidden', 'false');
-                // focus first nav link for keyboard users
-                const first = document.querySelector('.nav-link');
-                if (first) first.focus();
-            }
-            function closeSidebar() {
-                document.body.classList.remove('sidebar-open');
-                if (btn) btn.setAttribute('aria-expanded', 'false');
-                if (backdrop) backdrop.setAttribute('aria-hidden', 'true');
-                if (sidebar) sidebar.setAttribute('aria-hidden', 'true');
-                if (btn) btn.focus();
-            }
-            if (btn) {
-                btn.setAttribute('aria-expanded', 'false');
-                btn.setAttribute('aria-controls', 'sidebar');
-                btn.addEventListener('click', () => { if (document.body.classList.contains('sidebar-open')) closeSidebar(); else openSidebar(); });
-            }
-            if (backdrop) backdrop.addEventListener('click', closeSidebar);
-            document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSidebar(); });
-            // close after clicking a nav link to reveal main content
-            document.querySelectorAll('.nav-link').forEach(a => a.addEventListener('click', () => { closeSidebar(); }));
-            // set initial aria-hidden on sidebar
-            if (sidebar) sidebar.setAttribute('aria-hidden', 'true');
-        })();
-    </script>
-
+    <script src="js/invoice-template.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/mobile.js"></script>
 
 </body>
 </html>
