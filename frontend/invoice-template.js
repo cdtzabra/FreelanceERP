@@ -58,14 +58,14 @@ const INVOICE_TEMPLATES = {
                   <tr>
                       <td style="border: 1px solid #ccc; padding: 8px;">Frais de déplacement</td>
                       <td style="border: 1px solid #ccc; padding: 8px;"></td>
-                      <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">{{invoice.transportFees}}€</td>
-                      <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">{{invoice.transportFees}}€</td>
+                      <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">{{invoice.travelFees}}€</td>
+                      <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">{{invoice.travelFees}}€</td>
                   </tr>
                   <tr>
                       <td style="border: 1px solid #ccc; padding: 8px;">Astreinte</td>
-                      <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">{{invoice.standbyHours}}</td>
-                      <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">{{invoice.standbyRate}}€</td>
-                      <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">{{invoice.standbyAmount}}€</td>
+                      <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">{{invoice.onCallQtity}}</td>
+                      <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">{{invoice.onCallRate}}€</td>
+                      <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">{{invoice.onCallAmount}}€</td>
                   </tr>
                   <tr>
                       <td></td>
@@ -205,100 +205,4 @@ function substituteTemplate(template, data) {
     });
 
     return result;
-}
-
-
-// Nouvelle fonction printInvoice améliorée
-async  function printInvoiceHTML(invoiceId, templateName = 'standard') {
-    const invoice = this.data.invoices.find(i => i.id === invoiceId);
-    if (!invoice) {
-        this.showToast('Facture introuvable', 'error');
-        return;
-    }
-
-    const client = this.data.clients.find(c => c.id === invoice.clientId);
-    const mission = this.data.missions.find(m => m.id === invoice.missionId);
-    const company = this.company || {};
-
-    if (!client || !mission) {
-        this.showToast('Client ou mission introuvable', 'error');
-        return;
-    }
-
-    // Préparer les données pour le template
-    const templateData = {
-        company: {
-            name: company.name || '',
-            address: (company.address || '').replace(/\n/g, '<br>'),
-            email: company.email || '',
-            phone: company.phone || '',
-            siret: company.siret || '',
-            tva_id: company.tva_id || '',
-            nda: company.nda || '',
-            iban: company.iban || ''
-        },
-        client: {
-            company: client.company || '',
-            siren: client.siren || '',
-            address: (client.address || '').replace(/\n/g, '<br>'),
-            contact: {
-                name: client.contact?.name || '',
-                email: client.contact?.email || '',
-                phone: client.contact?.phone || ''
-            }
-        },
-        mission: {
-            title: mission.title || '',
-            description: mission.description || '',
-            dailyRate: (mission.dailyRate || 0).toFixed(2)
-        },
-        invoice: {
-            number: invoice.number || '',
-            date: invoice.date || '',
-            dueDate: invoice.dueDate || '',
-            quantity: 1,
-            amountHT: (invoice.amount || 0).toFixed(2),
-            period: `${invoice.date}`,
-            vatRate: invoice.vatRate || 20,
-            
-            // Optionnels : frais et astreinte (si nécessaire)
-            showTransportFees: false,
-            transportFees: 0,
-            showStandby: false,
-            standbyHours: 0,
-            standbyRate: 0,
-            standbyAmount: 0,
-            
-            // Calculs
-            subtotalHT: (invoice.amount || 0).toFixed(2),
-            vatAmount: ((invoice.amount || 0) * ((invoice.vatRate || 0) / 100)).toFixed(2),
-            totalTTC: ((invoice.amount || 0) * (1 + (invoice.vatRate || 0) / 100)).toFixed(2)
-        }
-    };
-
-    // Sélectionner le template
-    const template = INVOICE_TEMPLATES[templateName] || INVOICE_TEMPLATES.standard;
-    if (!template) {
-        this.showToast('Template non trouvé', 'error');
-        return;
-    }
-
-    // Générer le HTML
-    const html = substituteTemplate(template, templateData);
-
-    // Convertir en PDF avec html2pdf
-    const opt = {
-        margin: 10,
-        filename: `${invoice.number}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2 },
-        jsPDF: { orientation: 'p', unit: 'mm', format: 'a4' }
-    };
-
-    // S'assurer que html2pdf est chargé
-    if (typeof html2pdf !== 'undefined') {
-        html2pdf().set(opt).from(html).save();
-    } else {
-        this.showToast('Bibliothèque html2pdf non chargée', 'error');
-    }
 }
