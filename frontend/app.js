@@ -281,16 +281,21 @@ class FreelanceERP {
     Save Data in SQLite
     ------------------------- */
     async saveData() {
+        // Return boolean indicating whether remote sync succeeded (or not needed).
         if (!this.backend.url || !this.backend.apiKey) {
-            return;
+            // No backend configured — consider save successful locally
+            return true;
         }
 
         try {
             if (!this.suppressRemoteSync) {
                 await this.syncSaveToServerSilent();
             }
+            return true;
         } catch (e) {
             console.error('Erreur de sauvegarde serveur:', e);
+            this.showToast('Échec de synchronisation avec le serveur', 'warning');
+            return false;
         }
     }
 
@@ -1052,10 +1057,21 @@ class FreelanceERP {
         this.showClientForm(client);
     }
 
-    deleteClient(id) {
+    async deleteClient(id) {
+        // Prevent deletion if client has linked missions or invoices
+        const linkedMission = this.data.missions.find(m => m.clientId === id);
+        const linkedInvoice = this.data.invoices.find(i => i.clientId === id);
+        if (linkedMission || linkedInvoice) {
+            this.showToast('Impossible de supprimer le client : des missions ou factures lui sont liées.', 'error');
+            return;
+        }
         if (confirm('Êtes-vous sûr de vouloir supprimer ce client ?')) {
             this.data.clients = this.data.clients.filter(c => c.id !== id);
-            this.saveData();
+            const ok = await this.saveData();
+            if (!ok) {
+                this.showToast('Suppression non sauvegardée sur le serveur. Vérifiez la connexion.', 'error');
+                return;
+            }
             this.renderClients();
             this.showToast('Client supprimé avec succès', 'success');
         }
@@ -1194,10 +1210,20 @@ class FreelanceERP {
         this.showMissionForm(mission);
     }
 
-    deleteMission(id) {
+    async deleteMission(id) {
+        // Prevent deletion if mission has linked invoices
+        const linkedInvoice = this.data.invoices.find(i => i.missionId === id);
+        if (linkedInvoice) {
+            this.showToast('Impossible de supprimer la mission : des factures y sont liées.', 'error');
+            return;
+        }
         if (confirm('Êtes-vous sûr de vouloir supprimer cette mission ?')) {
             this.data.missions = this.data.missions.filter(m => m.id !== id);
-            this.saveData();
+            const ok = await this.saveData();
+            if (!ok) {
+                this.showToast('Suppression non sauvegardée sur le serveur. Vérifiez la connexion.', 'error');
+                return;
+            }
             this.renderMissions();
             this.showToast('Mission supprimée avec succès', 'success');
         }
@@ -1729,13 +1755,15 @@ class FreelanceERP {
                 activityMonth: `${invoice.activityMonth}`,
                 vatRate: invoice.vatRate || 20,
                 
-                // Optionnels : frais et astreinte (si nécessaire)
-                showTransportFees: false,
-                transportFees: 0,
-                showStandby: false,
-                standbyHours: 0,
-                standbyRate: 0,
-                standbyAmount: 0,
+                // Optionnel: additionnal fees (not yet in UI) when usting "invoice standard" template
+                // travelFees will include all at one: transportFees + accommodationFees + mealFees
+                // For now we set them to 0
+                travelFees: 0,
+                travelQtity: 0,
+
+                onCallQtity: 0,
+                onCallRate: 0,
+                onCallAmount: 0,
                 
                 // Calculs
                 subtotalHT: (invoice.amount || 0).toFixed(2),
@@ -1745,7 +1773,7 @@ class FreelanceERP {
         };
 
         // Select the template template
-        const template = INVOICE_TEMPLATES[templateName] || INVOICE_TEMPLATES.standard;
+        const template = INVOICE_TEMPLATES[templateName] || INVOICE_TEMPLATES.minimal;
         if (!template) {
             this.showToast('Template non trouvé', 'error');
             return;
@@ -1840,7 +1868,7 @@ class FreelanceERP {
         }
     }
 
-    saveClient() {
+    async saveClient() {
         const formData = {
             company: document.getElementById('company').value,
             siren: document.getElementById('siren').value,
@@ -1863,7 +1891,6 @@ class FreelanceERP {
         if (this.currentEditItem) {
             const index = this.data.clients.findIndex(c => c.id === this.currentEditItem.id);
             this.data.clients[index] = { ...this.currentEditItem, ...formData };
-            this.showToast('Client modifié avec succès', 'success');
         } else {
             const newClient = {
                 id: Math.max(0, ...this.data.clients.map(c => c.id)) + 1,
@@ -1871,15 +1898,21 @@ class FreelanceERP {
                 createdAt: new Date().toISOString().split('T')[0]
             };
             this.data.clients.push(newClient);
-            this.showToast('Client ajouté avec succès', 'success');
         }
 
-        this.saveData();
+        const ok = await this.saveData();
+        if (!ok) {
+            this.showToast('Enregistrement non sauvegardé sur le serveur. Vérifiez la connexion.', 'error');
+            // keep modal open so user can retry
+            return;
+        }
+
         this.renderClients();
+        this.showToast(this.currentEditItem ? 'Client modifié avec succès' : 'Client ajouté avec succès', 'success');
         this.closeModal();
     }
 
-    saveMission() {
+    async saveMission() {
         const formData = {
             title: document.getElementById('mission-title').value,
             description: document.getElementById('mission-description').value,
@@ -1900,7 +1933,6 @@ class FreelanceERP {
         if (this.currentEditItem) {
             const index = this.data.missions.findIndex(m => m.id === this.currentEditItem.id);
             this.data.missions[index] = { ...this.currentEditItem, ...formData };
-            this.showToast('Mission modifiée avec succès', 'success');
         } else {
             const newMission = {
                 id: Math.max(0, ...this.data.missions.map(m => m.id)) + 1,
@@ -1908,15 +1940,20 @@ class FreelanceERP {
                 createdAt: new Date().toISOString().split('T')[0]
             };
             this.data.missions.push(newMission);
-            this.showToast('Mission ajoutée avec succès', 'success');
         }
 
-        this.saveData();
+        const ok = await this.saveData();
+        if (!ok) {
+            this.showToast('Enregistrement non sauvegardé sur le serveur. Vérifiez la connexion.', 'error');
+            return;
+        }
+
         this.renderMissions();
+        this.showToast(this.currentEditItem ? 'Mission modifiée avec succès' : 'Mission ajoutée avec succès', 'success');
         this.closeModal();
     }
 
-    saveInvoice() {
+    async saveInvoice() {
         const formData = {
             number: document.getElementById('invoice-number').value,
             date: document.getElementById('invoice-date').value,
@@ -1935,7 +1972,6 @@ class FreelanceERP {
         if (this.currentEditItem) {
             const index = this.data.invoices.findIndex(i => i.id === this.currentEditItem.id);
             this.data.invoices[index] = { ...this.currentEditItem, ...formData };
-            this.showToast('Facture modifiée avec succès', 'success');
         } else {
             // assign a unique id first
             const newId = Math.max(0, ...this.data.invoices.map(i => i.id)) + 1;
@@ -1951,11 +1987,16 @@ class FreelanceERP {
                 createdAt: new Date().toISOString().split('T')[0]
             };
             this.data.invoices.push(newInvoice);
-            this.showToast('Facture ajoutée avec succès', 'success');
         }
 
-        this.saveData();
+        const ok = await this.saveData();
+        if (!ok) {
+            this.showToast('Enregistrement non sauvegardé sur le serveur. Vérifiez la connexion.', 'error');
+            return;
+        }
+
         this.renderInvoices();
+        this.showToast(this.currentEditItem ? 'Facture modifiée avec succès' : 'Facture ajoutée avec succès', 'success');
         this.closeModal();
     }
 

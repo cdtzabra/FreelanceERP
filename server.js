@@ -103,6 +103,11 @@ async function main() {
             if (!payload || typeof payload !== 'object') {
                 return res.status(400).json({ error: 'Body must be { data: {...} }' });
             }
+            // Server-side validation: ensure referential integrity before saving
+            const validation = validatePayload(payload);
+            if (!validation.valid) {
+                return res.status(400).json({ error: 'Invalid data', details: validation.errors });
+            }
             const json = JSON.stringify(payload);
             const now = new Date().toISOString();
             await db.run(
@@ -116,6 +121,82 @@ async function main() {
             res.status(500).json({ error: 'Database error' });
         }
     });
+
+    // Validate payload structure and referential integrity
+    function validatePayload(payload) {
+        const errors = [];
+
+        const clients = Array.isArray(payload.clients) ? payload.clients : [];
+        const missions = Array.isArray(payload.missions) ? payload.missions : [];
+        const invoices = Array.isArray(payload.invoices) ? payload.invoices : [];
+        const cras = Array.isArray(payload.cras) ? payload.cras : [];
+
+        // Helper: collect ids
+        const clientIds = new Set(clients.map(c => c.id).filter(id => id !== undefined && id !== null));
+        const missionIds = new Set(missions.map(m => m.id).filter(id => id !== undefined && id !== null));
+        const invoiceIds = new Set(invoices.map(i => i.id).filter(id => id !== undefined && id !== null));
+        const craIds = new Set(cras.map(c => c.id).filter(id => id !== undefined && id !== null));
+
+        // Check for duplicate IDs within each collection
+        function findDuplicates(arr) {
+            const seen = new Set();
+            const dupes = new Set();
+            for (const x of arr) {
+                if (x === undefined || x === null) continue;
+                if (seen.has(x)) dupes.add(x);
+                seen.add(x);
+            }
+            return [...dupes];
+        }
+
+        const dupClients = findDuplicates(clients.map(c => c.id));
+        if (dupClients.length) errors.push(`Duplicate client ids: ${dupClients.join(', ')}`);
+        const dupMissions = findDuplicates(missions.map(m => m.id));
+        if (dupMissions.length) errors.push(`Duplicate mission ids: ${dupMissions.join(', ')}`);
+        const dupInvoices = findDuplicates(invoices.map(i => i.id));
+        if (dupInvoices.length) errors.push(`Duplicate invoice ids: ${dupInvoices.join(', ')}`);
+        const dupCras = findDuplicates(cras.map(c => c.id));
+        if (dupCras.length) errors.push(`Duplicate CRA ids: ${dupCras.join(', ')}`);
+
+        // Referential checks
+        // Missions must reference an existing clientId
+        missions.forEach(m => {
+            if (m.clientId == null) {
+                errors.push(`Mission ${m.id ?? '<no-id>'} missing clientId`);
+            } else if (!clientIds.has(m.clientId)) {
+                errors.push(`Mission ${m.id ?? '<no-id>'} references unknown clientId ${m.clientId}`);
+            }
+        });
+
+        // Invoices must reference existing clientId and missionId if present
+        invoices.forEach(i => {
+            if (i.clientId == null) {
+                errors.push(`Invoice ${i.id ?? '<no-id>'} missing clientId`);
+            } else if (!clientIds.has(i.clientId)) {
+                errors.push(`Invoice ${i.id ?? '<no-id>'} references unknown clientId ${i.clientId}`);
+            }
+            if (i.missionId != null && !missionIds.has(i.missionId)) {
+                errors.push(`Invoice ${i.id ?? '<no-id>'} references unknown missionId ${i.missionId}`);
+            }
+        });
+
+        // CRAs must reference existing missionId
+        cras.forEach(c => {
+            if (c.missionId == null) {
+                errors.push(`CRA ${c.id ?? '<no-id>'} missing missionId`);
+            } else if (!missionIds.has(c.missionId)) {
+                errors.push(`CRA ${c.id ?? '<no-id>'} references unknown missionId ${c.missionId}`);
+            }
+        });
+
+        // Optional: Basic shape checks
+        if (!Array.isArray(payload.clients)) errors.push('clients must be an array');
+        if (!Array.isArray(payload.missions)) errors.push('missions must be an array');
+        if (!Array.isArray(payload.invoices)) errors.push('invoices must be an array');
+        if (!Array.isArray(payload.cras)) errors.push('cras must be an array');
+
+        return { valid: errors.length === 0, errors };
+    }
 
      // serve frontend files
      const __filename = fileURLToPath(import.meta.url);
