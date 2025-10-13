@@ -124,15 +124,10 @@ class FreelanceERP {
 
         try {
             const fileExtension = file.name.split('.').pop().toLowerCase();
-            
             if (fileExtension === 'json') {
                 await this.importJSON(file);
-            } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
-                await this.importExcel(file);
-            } else if (fileExtension === 'csv') {
-                await this.importCSV(file);
             } else {
-                this.showToast('Format de fichier non supporté. Utilisez JSON, Excel ou CSV', 'error');
+                this.showToast('Format de fichier non supporté. Utilisez uniquement JSON', 'error');
             }
         } catch (error) {
             console.error('Erreur lors de l\'import:', error);
@@ -146,7 +141,7 @@ class FreelanceERP {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
             
-            reader.onload = (e) => {
+            reader.onload = async (e) => {
                 try {
                     const importedData = JSON.parse(e.target.result);
                     
@@ -167,11 +162,19 @@ class FreelanceERP {
                         this.mergeData(importedData.data);
                     }
 
-                    this.saveData();
+                    const saved = await this.saveData();
                     this.updateDashboard();
                     this.showPage(this.currentPage);
-                    
-                    this.showToast('Données importées avec succès', 'success');
+
+                    if (saved) {
+                        this.showToast('Données importées avec succès', 'success');
+                    } else {
+                        // remote sync failed — provide validation details if available
+                        const d = this._lastServerError;
+                        const reason = d ? (d.details || d.error || d.message || JSON.stringify(d)) : 'Erreur inconnue';
+                        console.error('Remote save failed after import:', d);
+                        this.showToast('Import partiel : ' + String(reason), 'warning');
+                    }
                     resolve();
                 } catch (error) {
                     reject(error);
@@ -184,65 +187,7 @@ class FreelanceERP {
     }
 
     async importExcel(file) {
-        this.showToast('Import Excel: Veuillez utiliser le format JSON pour un import complet', 'info');
-    }
-
-    async importCSV(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            
-            reader.onload = (e) => {
-                try {
-                    const csvContent = e.target.result;
-                    const lines = csvContent.split('\n');
-                    
-                    if (lines.length < 2) {
-                        throw new Error('Fichier CSV vide ou invalide');
-                    }
-
-                    const clients = [];
-
-                    for (let i = 1; i < lines.length; i++) {
-                        if (!lines[i].trim()) continue;
-                        
-                        const values = lines[i].split(',').map(v => v.trim());
-                        const client = {
-                            id: Math.max(0, ...this.data.clients.map(c => c.id)) + i,
-                            company: values[0] || '',
-                            siren: values[1] || '',
-                            address: values[2] || '',
-                            contact: {
-                                name: values[3] || '',
-                                email: values[4] || '',
-                                phone: values[5] || ''
-                            },
-                            billingAddress: values[2] || '',
-                            createdAt: new Date().toISOString().split('T')[0]
-                        };
-                        
-                        if (client.company && client.siren) {
-                            clients.push(client);
-                        }
-                    }
-
-                    if (clients.length > 0) {
-                        this.data.clients.push(...clients);
-                        this.saveData();
-                        this.renderClients();
-                        this.showToast(`${clients.length} client(s) importé(s) depuis CSV`, 'success');
-                    } else {
-                        throw new Error('Aucun client valide trouvé dans le CSV');
-                    }
-
-                    resolve();
-                } catch (error) {
-                    reject(error);
-                }
-            };
-
-            reader.onerror = () => reject(new Error('Erreur de lecture du fichier'));
-            reader.readAsText(file);
-        });
+        // Excel and CSV imports removed — only JSON import is supported now
     }
 
     mergeData(importedData) {
@@ -441,7 +386,8 @@ class FreelanceERP {
     async syncSaveToServer() {
         if (!this.backend.url || !this.backend.apiKey) {
             this.showToast('Backend non configuré', 'error');
-            return;
+            this._lastServerError = { error: 'Backend non configuré' };
+            return false;
         }
         try {
             const res = await fetch(`${this.backend.url}/api/data`, {
@@ -452,17 +398,28 @@ class FreelanceERP {
                 },
                 body: JSON.stringify({ data: this.data })
             });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
+            if (!res.ok) {
+                // try to parse response body
+                let details = null;
+                try { details = await res.json(); } catch (_) { details = { status: res.status, text: await res.text() }; }
+                this._lastServerError = details;
+                this.showToast('Échec de synchronisation: ' + (details.error || details.message || res.status), 'error');
+                return false;
+            }
+            this._lastServerError = null;
             this.showToast('Synchronisé avec le serveur', 'success');
+            return true;
         } catch (e) {
-            this.showToast('Échec de synchronisation', 'error');
+            this._lastServerError = { error: e.message || String(e) };
+            this.showToast('Échec de synchronisation: ' + (e.message || String(e)), 'error');
+            return false;
         }
     }
 
     async syncSaveToServerSilent() {
         if (!this.backend.url || !this.backend.apiKey) return;
         try {
-            await fetch(`${this.backend.url}/api/data`, {
+            const res = await fetch(`${this.backend.url}/api/data`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -470,6 +427,11 @@ class FreelanceERP {
                 },
                 body: JSON.stringify({ data: this.data })
             });
+            if (!res.ok) {
+                try { this._lastServerError = await res.json(); } catch (_) { this._lastServerError = { status: res.status, text: await res.text() }; }
+            } else {
+                this._lastServerError = null;
+            }
         } catch (_) { /* ignore */ }
     }
 
