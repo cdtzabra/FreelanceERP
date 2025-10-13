@@ -65,14 +65,15 @@ class FreelanceERP {
                 // set global shared year filter
                 const v = e.target.value || null;
                 this.globalYear = v;
-                        // when global changes, update dashboard and charts
-                        this.updateDashboard();
-                        this.renderCharts();
-                        // reflect global on other year selects
-                        ['mission-year-filter','invoice-year-filter','cra-year-filter'].forEach(id => {
-                            const el = document.getElementById(id);
-                            if (el) el.value = v || '';
-                        });
+                // when global changes, update all pages and charts so the change is dynamic regardless of current page
+                this.updateDashboard();
+                this.renderCharts();
+                // re-render other pages so the new filter is reflected immediately
+                this.renderMissions();
+                this.renderCRAs();
+                this.renderInvoices();
+                this.renderOperations();
+                this.updateYearBadge();
             });
         }
     }
@@ -462,14 +463,11 @@ class FreelanceERP {
 
         document.getElementById('mission-status-filter').addEventListener('change', () => this.renderMissions());
         document.getElementById('mission-client-filter').addEventListener('change', () => this.renderMissions());
-    const missionYearEl = document.getElementById('mission-year-filter');
-    if (missionYearEl) missionYearEl.addEventListener('change', (e) => { this.globalYear = e.target.value || null; this.populateDashboardYearFilter(); this.updateDashboard(); this.renderMissions(); this.renderCharts(); });
+    // Per-page year selects removed; global header filter drives page filtering
         document.getElementById('invoice-status-filter').addEventListener('change', () => this.renderInvoices());
-    const invoiceYearEl = document.getElementById('invoice-year-filter');
-    if (invoiceYearEl) invoiceYearEl.addEventListener('change', (e) => { this.globalYear = e.target.value || null; this.populateDashboardYearFilter(); this.updateDashboard(); this.renderInvoices(); this.renderCharts(); });
+    // invoiceYearEl removed - global header drives year selection
     document.getElementById('cra-month-filter').addEventListener('change', () => this.renderCRAs());
-    const craYearEl = document.getElementById('cra-year-filter');
-    if (craYearEl) craYearEl.addEventListener('change', (e) => { this.globalYear = e.target.value || null; this.populateDashboardYearFilter(); this.renderCRAs(); this.updateDashboard(); this.renderCharts(); });
+    // craYearEl removed - global header drives year selection
 
 
         document.getElementById('modal').addEventListener('click', (e) => {
@@ -632,13 +630,15 @@ class FreelanceERP {
         badge.style.display = 'inline-flex';
         clearBtn.onclick = () => {
             this.globalYear = null;
-            // reset selects
-            ['dashboard-year-filter','mission-year-filter','invoice-year-filter','cra-year-filter'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.value = '';
-            });
+            // reset header dashboard select only
+            const dash = document.getElementById('dashboard-year-filter'); if (dash) dash.value = '';
+            // re-render pages and charts
             this.updateDashboard();
             this.renderCharts();
+            this.renderMissions();
+            this.renderCRAs();
+            this.renderInvoices();
+            this.renderOperations();
             this.updateYearBadge();
         };
     }
