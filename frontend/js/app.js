@@ -651,7 +651,7 @@ class FreelanceERP {
 
     getSelectedYear() {
         // For backward compatibility, this returns the global year
-        return this.globalYear || new Date().getFullYear().toString() || null;
+        return this.globalYear || null;
     }
 
     updateYearBadge() {
