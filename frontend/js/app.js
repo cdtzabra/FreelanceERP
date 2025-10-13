@@ -21,6 +21,7 @@ class FreelanceERP {
         };
         this.backend = { url: '', apiKey: '' };
         this.globalYear = null; // shared year filter across pages (null = all)
+        this.showArchivedClients = false; // UI toggle to display archived clients in clients list
         this.suppressRemoteSync = false;
         this.init();
     }
@@ -163,6 +164,11 @@ class FreelanceERP {
                         this.mergeData(importedData.data);
                     }
 
+                    // Ensure clients have a status (default 'active') to support archived clients
+                    if (this.data.clients && Array.isArray(this.data.clients)) {
+                        this.data.clients = this.data.clients.map(c => ({ status: 'active', ...c }));
+                    }
+
                     const saved = await this.saveData();
                     this.updateDashboard();
                     this.showPage(this.currentPage);
@@ -199,7 +205,7 @@ class FreelanceERP {
 
         if (importedData.clients) {
             importedData.clients.forEach((client, index) => {
-                const newClient = { ...client, id: maxClientId + index + 1 };
+                const newClient = { status: 'active', ...client, id: maxClientId + index + 1 };
                 this.data.clients.push(newClient);
             });
         }
@@ -450,6 +456,8 @@ class FreelanceERP {
         });
 
         document.getElementById('add-client-btn').addEventListener('click', () => this.showClientForm());
+    const toggleArchived = document.getElementById('toggle-show-archived');
+    if (toggleArchived) toggleArchived.addEventListener('change', (e) => { this.showArchivedClients = !!e.target.checked; this.renderClients(); });
         document.getElementById('add-mission-btn').addEventListener('click', () => this.showMissionForm());
         document.getElementById('add-invoice-btn').addEventListener('click', () => this.showInvoiceForm());
         document.getElementById('add-cra-btn').addEventListener('click', () => this.showCRAForm());
@@ -561,7 +569,7 @@ class FreelanceERP {
 
         const activeMissions = filtered.missions.filter(m => m.status === 'En cours').length;
         const pendingInvoices = filtered.invoices.filter(i => i.status === 'Envoyée').length;
-        const totalClients = this.data.clients.length; // clients are not year-scoped
+    const totalClients = (this.data.clients || []).filter(c => (c.status || 'active') === 'active').length; // only count active clients
 
         document.getElementById('total-revenue').textContent = `${totalRevenue.toLocaleString('fr-FR')} €`;
         document.getElementById('pending-revenue').textContent = `${pendingRevenue.toLocaleString('fr-FR')} €`;
@@ -569,6 +577,45 @@ class FreelanceERP {
         document.getElementById('active-missions').textContent = activeMissions;
         document.getElementById('pending-invoices').textContent = pendingInvoices;
         document.getElementById('total-clients').textContent = totalClients;
+
+        // Additional dashboard metrics: total worked days, best worked month (by days), best revenue month (by generated revenue)
+        // total worked days: sum of filtered CRAs daysWorked
+        const totalWorkedDays = (filtered.cras || []).reduce((s, c) => s + (c.daysWorked || 0), 0);
+        const workedByMonth = {};
+        (filtered.cras || []).forEach(c => {
+            const m = c.month || 'unknown';
+            workedByMonth[m] = (workedByMonth[m] || 0) + (c.daysWorked || 0);
+        });
+        const bestWorkedEntry = Object.entries(workedByMonth).sort((a,b) => b[1] - a[1])[0];
+        const bestWorkedLabel = bestWorkedEntry ? `${this.formatMonth(bestWorkedEntry[0])} — ${bestWorkedEntry[1]} jours` : '—';
+
+        // best revenue month: use generated revenue by CRA aggregation (HT+TVA)
+        const revenueByMonth = {};
+        (filtered.cras || []).forEach(c => {
+            const mission = (this.data.missions || []).find(m => m.id === c.missionId);
+            if (!mission) return;
+            const amountHT = (c.daysWorked || 0) * (mission.dailyRate || 0);
+            const vat = amountHT * ((mission.vatRate ?? 20) / 100);
+            const total = amountHT + vat;
+            const m = c.month || 'unknown';
+            revenueByMonth[m] = (revenueByMonth[m] || 0) + total;
+        });
+        // invoices paid in the selected year also contribute to revenueByMonth (paidDate or date)
+        (filtered.invoices || []).forEach(inv => {
+            const dateStr = inv.paidDate || inv.date;
+            if (!dateStr) return;
+            const ym = dateStr.slice(0,7);
+            const amountHT = inv.amount || 0;
+            const vat = amountHT * ((inv.vatRate || 0) / 100);
+            const total = amountHT + vat;
+            revenueByMonth[ym] = (revenueByMonth[ym] || 0) + total;
+        });
+        const bestRevenueEntry = Object.entries(revenueByMonth).sort((a,b) => b[1] - a[1])[0];
+        const bestRevenueLabel = bestRevenueEntry ? `${this.formatMonth(bestRevenueEntry[0])} — ${Number(bestRevenueEntry[1]).toLocaleString('fr-FR')} €` : '—';
+
+        const twdEl = document.getElementById('total-worked-days'); if (twdEl) twdEl.textContent = totalWorkedDays;
+        const bwEl = document.getElementById('best-worked-month'); if (bwEl) bwEl.textContent = bestWorkedLabel;
+        const brEl = document.getElementById('best-revenue-month'); if (brEl) brEl.textContent = bestRevenueLabel;
 
         this.renderRecentMissions();
         this.renderPendingInvoices();
@@ -1150,25 +1197,57 @@ class FreelanceERP {
 
     renderClients() {
         const tbody = document.getElementById('clients-table-body');
-        tbody.innerHTML = this.data.clients.map(client => `
-            <tr>
-                <td>${client.company}</td>
-                <td>${client.siren}</td>
-                <td>${client.contact.name}</td>
-                <td>${client.contact.email}</td>
-                <td>${client.billingEmail || ''}</td>
-                <td>
-                    <div class="action-buttons">
-                        <button class="btn-icon btn-icon--edit" onclick="app.editClient(${client.id})" title="Modifier">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="btn-icon btn-icon--delete" onclick="app.deleteClient(${client.id})" title="Supprimer">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                </td>
-            </tr>
-        `).join('');
+        const rows = (this.data.clients || [])
+            .filter(c => this.showArchivedClients ? true : ((c.status || 'active') === 'active'))
+            .map(client => {
+                const status = client.status || 'active';
+                const statusHtml = status === 'archived' ? `<span class="badge badge-archived">Archivé</span>` : `<span class="badge badge-active">Actif</span>`;
+                const archiveBtn = status === 'archived'
+                    ? `<button class="btn-icon" onclick="app.unarchiveClient(${client.id})" title="Restaurer"><i class="fas fa-undo"></i></button>`
+                    : `<button class="btn-icon" onclick="app.archiveClient(${client.id})" title="Archiver"><i class="fas fa-archive"></i></button>`;
+                return `
+                    <tr>
+                        <td>${client.company}</td>
+                        <td>${client.siren}</td>
+                        <td>${client.contact.name}</td>
+                        <td>${client.contact.email}</td>
+                        <td>${client.billingEmail || ''}</td>
+                        <td>${statusHtml}</td>
+                        <td>
+                            <div class="action-buttons">
+                                <button class="btn-icon btn-icon--edit" onclick="app.editClient(${client.id})" title="Modifier">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                ${archiveBtn}
+                                <button class="btn-icon btn-icon--delete" onclick="app.deleteClient(${client.id})" title="Supprimer">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+        tbody.innerHTML = rows.join('');
+    }
+
+    archiveClient(id) {
+        const client = this.data.clients.find(c => c.id === id);
+        if (!client) return;
+        if (!confirm(`Archiver le client "${client.company}" ?`)) return;
+        client.status = 'archived';
+        this.saveData();
+        this.renderClients();
+        this.showToast('Client archivé', 'success');
+    }
+
+    unarchiveClient(id) {
+        const client = this.data.clients.find(c => c.id === id);
+        if (!client) return;
+        if (!confirm(`Restaurer le client "${client.company}" ?`)) return;
+        client.status = 'active';
+        this.saveData();
+        this.renderClients();
+        this.showToast('Client restauré', 'success');
     }
 
     showClientForm(client = null) {
@@ -1216,6 +1295,15 @@ class FreelanceERP {
                     <div class="form-group">
                         <label class="form-label" for="client-notes">Notes</label>
                         <textarea id="client-notes" class="form-control">${client ? (client.notes || '') : ''}</textarea>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="client-status">Statut</label>
+                        <select id="client-status" class="form-control">
+                            <option value="active" ${!client || client.status === 'active' ? 'selected' : ''}>Actif</option>
+                            <option value="archived" ${client && client.status === 'archived' ? 'selected' : ''}>Archivé</option>
+                        </select>
                     </div>
                 </div>
                 <div class="checkbox-group">
@@ -2143,6 +2231,10 @@ class FreelanceERP {
             notes: document.getElementById('client-notes') ? document.getElementById('client-notes').value : ''
         };
 
+        // include status if available
+        const statusEl = document.getElementById('client-status');
+        if (statusEl) formData.status = statusEl.value || 'active';
+
         if (!/^\d{9}$/.test(formData.siren)) {
             this.showToast('Le SIREN doit contenir exactement 9 chiffres', 'error');
             return;
@@ -2154,6 +2246,7 @@ class FreelanceERP {
         } else {
             const newClient = {
                 id: Math.max(0, ...this.data.clients.map(c => c.id)) + 1,
+                status: formData.status || 'active',
                 ...formData,
                 createdAt: new Date().toISOString().split('T')[0]
             };

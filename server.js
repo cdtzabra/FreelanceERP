@@ -87,6 +87,10 @@ async function main() {
                 if (!payload.company) {
                     payload.company = {};
                 }
+                // Ensure clients have a status (default to 'active') for compatibility #STATUSFIX
+                // if (Array.isArray(payload.clients)) {
+                //     payload.clients = payload.clients.map(c => ({ status: (c && c.status) ? c.status : 'active', ...c }));
+                // }
             } catch (_) {
                 payload = { clients: [], missions: [], invoices: [], cras: [], operations: [], company: {} };
             }
@@ -103,6 +107,10 @@ async function main() {
             if (!payload || typeof payload !== 'object') {
                 return res.status(400).json({ error: 'Body must be { data: {...} }' });
             }
+            // Normalize clients: ensure status exists and defaults to 'active' #STATUSFIX
+            // if (Array.isArray(payload.clients)) {
+            //     payload.clients = payload.clients.map(c => ({ status: (c && c.status) ? c.status : 'active', ...c }));
+            // }
             // Server-side validation: ensure referential integrity before saving
             const validation = validatePayload(payload);
             if (!validation.valid) {
@@ -136,6 +144,14 @@ async function main() {
         const missionIds = new Set(missions.map(m => m.id).filter(id => id !== undefined && id !== null));
         const invoiceIds = new Set(invoices.map(i => i.id).filter(id => id !== undefined && id !== null));
         const craIds = new Set(cras.map(c => c.id).filter(id => id !== undefined && id !== null));
+
+        // Client status must be one of allowed values #STATUSFIX
+        // const allowedStatuses = new Set(['active', 'archived']);
+        // clients.forEach(c => {
+        //     if (c && c.status && !allowedStatuses.has(c.status)) {
+        //         errors.push(`Client ${c.id ?? '<no-id>'} has invalid status '${c.status}'`);
+        //     }
+        // });
 
         // Check for duplicate IDs within each collection
         function findDuplicates(arr) {
