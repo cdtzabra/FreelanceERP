@@ -1497,10 +1497,11 @@ class FreelanceERP {
         const tbody = document.getElementById('cra-table-body');
         let html = '';
 
+        // Keep existing table grouping by month
         Object.keys(crasByMonth).sort().reverse().forEach(month => {
             const monthCRAs = crasByMonth[month];
             const monthData = monthCRAs[0];
-            const totalDays = monthCRAs.reduce((sum, cra) => sum + cra.daysWorked, 0);
+            const totalDays = monthCRAs.reduce((sum, cra) => sum + (cra.daysWorked || 0), 0);
             const workingDays = monthData.workingDaysInMonth || 22;
             const activityRate = ((totalDays / workingDays) * 100).toFixed(1);
 
@@ -1518,13 +1519,13 @@ class FreelanceERP {
                 const mission = this.data.missions.find(m => m.id === cra.missionId);
                 const client = mission ? this.data.clients.find(c => c.id === mission.clientId) : null;
 
-                const amount = cra.daysWorked * (mission ? mission.dailyRate : 0);
+                const amount = (cra.daysWorked || 0) * (mission ? mission.dailyRate : 0);
                 
                 html += `
                     <tr>
                         <td>${mission ? mission.title : 'N/A'}</td>
                         <td>${client ? client.company : 'N/A'}</td>
-                        <td>${cra.daysWorked}</td>
+                        <td>${cra.daysWorked || 0}</td>
                         <td>${amount.toLocaleString('fr-FR')} €</td>
                         <td>
                             <div class="action-buttons">
@@ -1545,6 +1546,57 @@ class FreelanceERP {
         });
 
         tbody.innerHTML = html || '<tr><td colspan="5" style="text-align: center;">Aucun CRA enregistré</td></tr>';
+
+        // --- CRA summary computation ---
+        // Total days
+        const totalDaysAll = filteredCRAs.reduce((s, c) => s + (c.daysWorked || 0), 0);
+
+        // Helper to determine semester key from month string YYYY-MM
+        const semesterKey = (monthStr) => {
+            if (!monthStr || monthStr.length < 7) return 'unknown';
+            const y = monthStr.slice(0,4);
+            const m = parseInt(monthStr.slice(5,7), 10);
+            return `${y}-${m <= 6 ? 'H1' : 'H2'}`;
+        };
+
+        // Aggregate per client
+        const clientAgg = new Map();
+        for (const c of filteredCRAs) {
+            const mission = this.data.missions.find(m => m.id === c.missionId) || {};
+            const client = this.data.clients.find(cl => cl.id === mission.clientId) || { id: 'unknown', company: 'Sans client' };
+            const cid = client.id || `unknown_${mission.clientId || 0}`;
+            if (!clientAgg.has(cid)) clientAgg.set(cid, { name: client.company || 'Sans client', total: 0, semesters: {} });
+            const entry = clientAgg.get(cid);
+            const days = c.daysWorked || 0;
+            entry.total += days;
+            const sk = semesterKey(c.month);
+            entry.semesters[sk] = (entry.semesters[sk] || 0) + days;
+        }
+
+        // Render summary into DOM
+        const summaryEl = document.getElementById('cra-summary-body');
+        if (summaryEl) {
+            if (clientAgg.size === 0) {
+                summaryEl.innerHTML = '<div>Aucun CRA</div>';
+            } else {
+                let shtml = `<div class="cra-summary-top"><strong>Total jours travaillés:</strong> ${totalDaysAll}</div>`;
+                shtml += '<div class="cra-summary-list">';
+                // sort clients by total desc
+                const sorted = [...clientAgg.values()].sort((a,b) => b.total - a.total);
+                for (const info of sorted) {
+                    shtml += `<div class="cra-client">`;
+                    shtml += `<div class="cra-client-name"><strong>${info.name}</strong> — Total: ${info.total} jours</div>`;
+                    shtml += `<div class="cra-client-sems">`;
+                    const semKeys = Object.keys(info.semesters).sort().reverse();
+                    for (const sk of semKeys) {
+                        shtml += `<span class="cra-client-sem">${sk}: ${info.semesters[sk]} jours</span>`;
+                    }
+                    shtml += `</div></div>`;
+                }
+                shtml += '</div>';
+                summaryEl.innerHTML = shtml;
+            }
+        }
     }
 
     populateCRAFilters() {
