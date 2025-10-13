@@ -8,7 +8,7 @@ class FreelanceERP {
             invoices: [],
             cras: [],
             operations: [],
-            company: {  // <-- AJOUT
+            company: {
                 name: '',
                 address: '',
                 phone: '',
@@ -21,6 +21,7 @@ class FreelanceERP {
         };
         this.backend = { url: '', apiKey: '' };
         this.globalYear = null; // shared year filter across pages (null = all)
+        this.showArchivedClients = false; // UI toggle to display archived clients in clients list
         this.suppressRemoteSync = false;
         this.init();
     }
@@ -65,14 +66,15 @@ class FreelanceERP {
                 // set global shared year filter
                 const v = e.target.value || null;
                 this.globalYear = v;
-                        // when global changes, update dashboard and charts
-                        this.updateDashboard();
-                        this.renderCharts();
-                        // reflect global on other year selects
-                        ['mission-year-filter','invoice-year-filter','cra-year-filter'].forEach(id => {
-                            const el = document.getElementById(id);
-                            if (el) el.value = v || '';
-                        });
+                // when global changes, update all pages and charts so the change is dynamic regardless of current page
+                this.updateDashboard();
+                this.renderCharts();
+                // re-render other pages so the new filter is reflected immediately
+                this.renderMissions();
+                this.renderCRAs();
+                this.renderInvoices();
+                this.renderOperations();
+                this.updateYearBadge();
             });
         }
     }
@@ -124,15 +126,10 @@ class FreelanceERP {
 
         try {
             const fileExtension = file.name.split('.').pop().toLowerCase();
-            
             if (fileExtension === 'json') {
                 await this.importJSON(file);
-            } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
-                await this.importExcel(file);
-            } else if (fileExtension === 'csv') {
-                await this.importCSV(file);
             } else {
-                this.showToast('Format de fichier non supporté. Utilisez JSON, Excel ou CSV', 'error');
+                this.showToast('Format de fichier non supporté. Utilisez uniquement JSON', 'error');
             }
         } catch (error) {
             console.error('Erreur lors de l\'import:', error);
@@ -146,7 +143,7 @@ class FreelanceERP {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
             
-            reader.onload = (e) => {
+            reader.onload = async (e) => {
                 try {
                     const importedData = JSON.parse(e.target.result);
                     
@@ -167,11 +164,24 @@ class FreelanceERP {
                         this.mergeData(importedData.data);
                     }
 
-                    this.saveData();
+                    // Ensure clients have a status (default 'active') to support archived clients
+                    if (this.data.clients && Array.isArray(this.data.clients)) {
+                        this.data.clients = this.data.clients.map(c => ({ status: 'active', ...c }));
+                    }
+
+                    const saved = await this.saveData();
                     this.updateDashboard();
                     this.showPage(this.currentPage);
-                    
-                    this.showToast('Données importées avec succès', 'success');
+
+                    if (saved) {
+                        this.showToast('Données importées avec succès', 'success');
+                    } else {
+                        // remote sync failed — provide validation details if available
+                        const d = this._lastServerError;
+                        const reason = d ? (d.details || d.error || d.message || JSON.stringify(d)) : 'Erreur inconnue';
+                        console.error('Remote save failed after import:', d);
+                        this.showToast('Import partiel : ' + String(reason), 'warning');
+                    }
                     resolve();
                 } catch (error) {
                     reject(error);
@@ -184,65 +194,7 @@ class FreelanceERP {
     }
 
     async importExcel(file) {
-        this.showToast('Import Excel: Veuillez utiliser le format JSON pour un import complet', 'info');
-    }
-
-    async importCSV(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            
-            reader.onload = (e) => {
-                try {
-                    const csvContent = e.target.result;
-                    const lines = csvContent.split('\n');
-                    
-                    if (lines.length < 2) {
-                        throw new Error('Fichier CSV vide ou invalide');
-                    }
-
-                    const clients = [];
-
-                    for (let i = 1; i < lines.length; i++) {
-                        if (!lines[i].trim()) continue;
-                        
-                        const values = lines[i].split(',').map(v => v.trim());
-                        const client = {
-                            id: Math.max(0, ...this.data.clients.map(c => c.id)) + i,
-                            company: values[0] || '',
-                            siren: values[1] || '',
-                            address: values[2] || '',
-                            contact: {
-                                name: values[3] || '',
-                                email: values[4] || '',
-                                phone: values[5] || ''
-                            },
-                            billingAddress: values[2] || '',
-                            createdAt: new Date().toISOString().split('T')[0]
-                        };
-                        
-                        if (client.company && client.siren) {
-                            clients.push(client);
-                        }
-                    }
-
-                    if (clients.length > 0) {
-                        this.data.clients.push(...clients);
-                        this.saveData();
-                        this.renderClients();
-                        this.showToast(`${clients.length} client(s) importé(s) depuis CSV`, 'success');
-                    } else {
-                        throw new Error('Aucun client valide trouvé dans le CSV');
-                    }
-
-                    resolve();
-                } catch (error) {
-                    reject(error);
-                }
-            };
-
-            reader.onerror = () => reject(new Error('Erreur de lecture du fichier'));
-            reader.readAsText(file);
-        });
+        // Excel and CSV imports removed — only JSON import is supported now
     }
 
     mergeData(importedData) {
@@ -253,7 +205,7 @@ class FreelanceERP {
 
         if (importedData.clients) {
             importedData.clients.forEach((client, index) => {
-                const newClient = { ...client, id: maxClientId + index + 1 };
+                const newClient = { status: 'active', ...client, id: maxClientId + index + 1 };
                 this.data.clients.push(newClient);
             });
         }
@@ -441,7 +393,8 @@ class FreelanceERP {
     async syncSaveToServer() {
         if (!this.backend.url || !this.backend.apiKey) {
             this.showToast('Backend non configuré', 'error');
-            return;
+            this._lastServerError = { error: 'Backend non configuré' };
+            return false;
         }
         try {
             const res = await fetch(`${this.backend.url}/api/data`, {
@@ -452,17 +405,28 @@ class FreelanceERP {
                 },
                 body: JSON.stringify({ data: this.data })
             });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
+            if (!res.ok) {
+                // try to parse response body
+                let details = null;
+                try { details = await res.json(); } catch (_) { details = { status: res.status, text: await res.text() }; }
+                this._lastServerError = details;
+                this.showToast('Échec de synchronisation: ' + (details.error || details.message || res.status), 'error');
+                return false;
+            }
+            this._lastServerError = null;
             this.showToast('Synchronisé avec le serveur', 'success');
+            return true;
         } catch (e) {
-            this.showToast('Échec de synchronisation', 'error');
+            this._lastServerError = { error: e.message || String(e) };
+            this.showToast('Échec de synchronisation: ' + (e.message || String(e)), 'error');
+            return false;
         }
     }
 
     async syncSaveToServerSilent() {
         if (!this.backend.url || !this.backend.apiKey) return;
         try {
-            await fetch(`${this.backend.url}/api/data`, {
+            const res = await fetch(`${this.backend.url}/api/data`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -470,6 +434,11 @@ class FreelanceERP {
                 },
                 body: JSON.stringify({ data: this.data })
             });
+            if (!res.ok) {
+                try { this._lastServerError = await res.json(); } catch (_) { this._lastServerError = { status: res.status, text: await res.text() }; }
+            } else {
+                this._lastServerError = null;
+            }
         } catch (_) { /* ignore */ }
     }
 
@@ -487,6 +456,8 @@ class FreelanceERP {
         });
 
         document.getElementById('add-client-btn').addEventListener('click', () => this.showClientForm());
+    const toggleArchived = document.getElementById('toggle-show-archived');
+    if (toggleArchived) toggleArchived.addEventListener('change', (e) => { this.showArchivedClients = !!e.target.checked; this.renderClients(); });
         document.getElementById('add-mission-btn').addEventListener('click', () => this.showMissionForm());
         document.getElementById('add-invoice-btn').addEventListener('click', () => this.showInvoiceForm());
         document.getElementById('add-cra-btn').addEventListener('click', () => this.showCRAForm());
@@ -500,14 +471,11 @@ class FreelanceERP {
 
         document.getElementById('mission-status-filter').addEventListener('change', () => this.renderMissions());
         document.getElementById('mission-client-filter').addEventListener('change', () => this.renderMissions());
-    const missionYearEl = document.getElementById('mission-year-filter');
-    if (missionYearEl) missionYearEl.addEventListener('change', (e) => { this.globalYear = e.target.value || null; this.populateDashboardYearFilter(); this.updateDashboard(); this.renderMissions(); this.renderCharts(); });
+    // Per-page year selects removed; global header filter drives page filtering
         document.getElementById('invoice-status-filter').addEventListener('change', () => this.renderInvoices());
-    const invoiceYearEl = document.getElementById('invoice-year-filter');
-    if (invoiceYearEl) invoiceYearEl.addEventListener('change', (e) => { this.globalYear = e.target.value || null; this.populateDashboardYearFilter(); this.updateDashboard(); this.renderInvoices(); this.renderCharts(); });
+    // invoiceYearEl removed - global header drives year selection
     document.getElementById('cra-month-filter').addEventListener('change', () => this.renderCRAs());
-    const craYearEl = document.getElementById('cra-year-filter');
-    if (craYearEl) craYearEl.addEventListener('change', (e) => { this.globalYear = e.target.value || null; this.populateDashboardYearFilter(); this.renderCRAs(); this.updateDashboard(); this.renderCharts(); });
+    // craYearEl removed - global header drives year selection
 
 
         document.getElementById('modal').addEventListener('click', (e) => {
@@ -601,7 +569,7 @@ class FreelanceERP {
 
         const activeMissions = filtered.missions.filter(m => m.status === 'En cours').length;
         const pendingInvoices = filtered.invoices.filter(i => i.status === 'Envoyée').length;
-        const totalClients = this.data.clients.length; // clients are not year-scoped
+    const totalClients = (this.data.clients || []).filter(c => (c.status || 'active') === 'active').length; // only count active clients
 
         document.getElementById('total-revenue').textContent = `${totalRevenue.toLocaleString('fr-FR')} €`;
         document.getElementById('pending-revenue').textContent = `${pendingRevenue.toLocaleString('fr-FR')} €`;
@@ -609,6 +577,36 @@ class FreelanceERP {
         document.getElementById('active-missions').textContent = activeMissions;
         document.getElementById('pending-invoices').textContent = pendingInvoices;
         document.getElementById('total-clients').textContent = totalClients;
+
+        // Additional dashboard metrics: total worked days, best worked month (by days), best revenue month (by generated revenue)
+        // total worked days: sum of filtered CRAs daysWorked
+        const totalWorkedDays = (filtered.cras || []).reduce((s, c) => s + (c.daysWorked || 0), 0);
+        const workedByMonth = {};
+        (filtered.cras || []).forEach(c => {
+            const m = c.month || 'unknown';
+            workedByMonth[m] = (workedByMonth[m] || 0) + (c.daysWorked || 0);
+        });
+        const bestWorkedEntry = Object.entries(workedByMonth).sort((a,b) => b[1] - a[1])[0];
+        const bestWorkedLabel = bestWorkedEntry ? `${this.formatMonth(bestWorkedEntry[0])} — ${bestWorkedEntry[1]} jours` : '—';
+
+        // best revenue month: use generated revenue by CRA aggregation (HT+TVA)
+        const revenueByMonth = {};
+        (filtered.cras || []).forEach(c => {
+            const mission = (this.data.missions || []).find(m => m.id === c.missionId);
+            if (!mission) return;
+            const amountHT = (c.daysWorked || 0) * (mission.dailyRate || 0);
+            const vat = amountHT * ((mission.vatRate ?? 20) / 100);
+            const total = amountHT + vat;
+            const m = c.month || 'unknown';
+            revenueByMonth[m] = (revenueByMonth[m] || 0) + total;
+        });
+
+        const bestRevenueEntry = Object.entries(revenueByMonth).sort((a,b) => b[1] - a[1])[0];
+        const bestRevenueLabel = bestRevenueEntry ? `${this.formatMonth(bestRevenueEntry[0])} — ${Number(bestRevenueEntry[1]).toLocaleString('fr-FR')} €` : '—';
+
+        const twdEl = document.getElementById('total-worked-days'); if (twdEl) twdEl.textContent = totalWorkedDays;
+        const bwEl = document.getElementById('best-worked-month'); if (bwEl) bwEl.textContent = bestWorkedLabel;
+        const brEl = document.getElementById('best-revenue-month'); if (brEl) brEl.textContent = bestRevenueLabel;
 
         this.renderRecentMissions();
         this.renderPendingInvoices();
@@ -653,7 +651,7 @@ class FreelanceERP {
 
     getSelectedYear() {
         // For backward compatibility, this returns the global year
-        return this.globalYear || null;
+        return this.globalYear || new Date().getFullYear().toString() || null;
     }
 
     updateYearBadge() {
@@ -666,17 +664,19 @@ class FreelanceERP {
             badge.style.display = 'none';
             return;
         }
-        label.textContent = `Année : ${y}`;
+        label.textContent = `Année Selectionnée : ${y}`;
         badge.style.display = 'inline-flex';
         clearBtn.onclick = () => {
             this.globalYear = null;
-            // reset selects
-            ['dashboard-year-filter','mission-year-filter','invoice-year-filter','cra-year-filter'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.value = '';
-            });
+            // reset header dashboard select only
+            const dash = document.getElementById('dashboard-year-filter'); if (dash) dash.value = '';
+            // re-render pages and charts
             this.updateDashboard();
             this.renderCharts();
+            this.renderMissions();
+            this.renderCRAs();
+            this.renderInvoices();
+            this.renderOperations();
             this.updateYearBadge();
         };
     }
@@ -1188,25 +1188,57 @@ class FreelanceERP {
 
     renderClients() {
         const tbody = document.getElementById('clients-table-body');
-        tbody.innerHTML = this.data.clients.map(client => `
-            <tr>
-                <td>${client.company}</td>
-                <td>${client.siren}</td>
-                <td>${client.contact.name}</td>
-                <td>${client.contact.email}</td>
-                <td>${client.billingEmail || ''}</td>
-                <td>
-                    <div class="action-buttons">
-                        <button class="btn-icon btn-icon--edit" onclick="app.editClient(${client.id})" title="Modifier">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="btn-icon btn-icon--delete" onclick="app.deleteClient(${client.id})" title="Supprimer">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                </td>
-            </tr>
-        `).join('');
+        const rows = (this.data.clients || [])
+            .filter(c => this.showArchivedClients ? true : ((c.status || 'active') === 'active'))
+            .map(client => {
+                const status = client.status || 'active';
+                const statusHtml = status === 'archived' ? `<span class="badge badge-archived">Archivé</span>` : `<span class="badge badge-active">Actif</span>`;
+                const archiveBtn = status === 'archived'
+                    ? `<button class="btn-icon" onclick="app.unarchiveClient(${client.id})" title="Restaurer"><i class="fas fa-undo"></i></button>`
+                    : `<button class="btn-icon" onclick="app.archiveClient(${client.id})" title="Archiver"><i class="fas fa-archive"></i></button>`;
+                return `
+                    <tr>
+                        <td>${client.company}</td>
+                        <td>${client.siren}</td>
+                        <td>${client.contact.name}</td>
+                        <td>${client.contact.email}</td>
+                        <td>${client.billingEmail || ''}</td>
+                        <td>${statusHtml}</td>
+                        <td>
+                            <div class="action-buttons">
+                                <button class="btn-icon btn-icon--edit" onclick="app.editClient(${client.id})" title="Modifier">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                ${archiveBtn}
+                                <button class="btn-icon btn-icon--delete" onclick="app.deleteClient(${client.id})" title="Supprimer">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+        tbody.innerHTML = rows.join('');
+    }
+
+    archiveClient(id) {
+        const client = this.data.clients.find(c => c.id === id);
+        if (!client) return;
+        if (!confirm(`Archiver le client "${client.company}" ?`)) return;
+        client.status = 'archived';
+        this.saveData();
+        this.renderClients();
+        this.showToast('Client archivé', 'success');
+    }
+
+    unarchiveClient(id) {
+        const client = this.data.clients.find(c => c.id === id);
+        if (!client) return;
+        if (!confirm(`Restaurer le client "${client.company}" ?`)) return;
+        client.status = 'active';
+        this.saveData();
+        this.renderClients();
+        this.showToast('Client restauré', 'success');
     }
 
     showClientForm(client = null) {
@@ -1254,6 +1286,15 @@ class FreelanceERP {
                     <div class="form-group">
                         <label class="form-label" for="client-notes">Notes</label>
                         <textarea id="client-notes" class="form-control">${client ? (client.notes || '') : ''}</textarea>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="client-status">Statut</label>
+                        <select id="client-status" class="form-control">
+                            <option value="active" ${!client || client.status === 'active' ? 'selected' : ''}>Actif</option>
+                            <option value="archived" ${client && client.status === 'archived' ? 'selected' : ''}>Archivé</option>
+                        </select>
                     </div>
                 </div>
                 <div class="checkbox-group">
@@ -1497,10 +1538,11 @@ class FreelanceERP {
         const tbody = document.getElementById('cra-table-body');
         let html = '';
 
+        // Keep existing table grouping by month
         Object.keys(crasByMonth).sort().reverse().forEach(month => {
             const monthCRAs = crasByMonth[month];
             const monthData = monthCRAs[0];
-            const totalDays = monthCRAs.reduce((sum, cra) => sum + cra.daysWorked, 0);
+            const totalDays = monthCRAs.reduce((sum, cra) => sum + (cra.daysWorked || 0), 0);
             const workingDays = monthData.workingDaysInMonth || 22;
             const activityRate = ((totalDays / workingDays) * 100).toFixed(1);
 
@@ -1518,13 +1560,13 @@ class FreelanceERP {
                 const mission = this.data.missions.find(m => m.id === cra.missionId);
                 const client = mission ? this.data.clients.find(c => c.id === mission.clientId) : null;
 
-                const amount = cra.daysWorked * (mission ? mission.dailyRate : 0);
+                const amount = (cra.daysWorked || 0) * (mission ? mission.dailyRate : 0);
                 
                 html += `
                     <tr>
                         <td>${mission ? mission.title : 'N/A'}</td>
                         <td>${client ? client.company : 'N/A'}</td>
-                        <td>${cra.daysWorked}</td>
+                        <td>${cra.daysWorked || 0}</td>
                         <td>${amount.toLocaleString('fr-FR')} €</td>
                         <td>
                             <div class="action-buttons">
@@ -1545,6 +1587,57 @@ class FreelanceERP {
         });
 
         tbody.innerHTML = html || '<tr><td colspan="5" style="text-align: center;">Aucun CRA enregistré</td></tr>';
+
+        // --- CRA summary computation ---
+        // Total days
+        const totalDaysAll = filteredCRAs.reduce((s, c) => s + (c.daysWorked || 0), 0);
+
+        // Helper to determine semester key from month string YYYY-MM
+        const semesterKey = (monthStr) => {
+            if (!monthStr || monthStr.length < 7) return 'unknown';
+            const y = monthStr.slice(0,4);
+            const m = parseInt(monthStr.slice(5,7), 10);
+            return `${y}-${m <= 6 ? 'H1' : 'H2'}`;
+        };
+
+        // Aggregate per client
+        const clientAgg = new Map();
+        for (const c of filteredCRAs) {
+            const mission = this.data.missions.find(m => m.id === c.missionId) || {};
+            const client = this.data.clients.find(cl => cl.id === mission.clientId) || { id: 'unknown', company: 'Sans client' };
+            const cid = client.id || `unknown_${mission.clientId || 0}`;
+            if (!clientAgg.has(cid)) clientAgg.set(cid, { name: client.company || 'Sans client', total: 0, semesters: {} });
+            const entry = clientAgg.get(cid);
+            const days = c.daysWorked || 0;
+            entry.total += days;
+            const sk = semesterKey(c.month);
+            entry.semesters[sk] = (entry.semesters[sk] || 0) + days;
+        }
+
+        // Render summary into DOM
+        const summaryEl = document.getElementById('cra-summary-body');
+        if (summaryEl) {
+            if (clientAgg.size === 0) {
+                summaryEl.innerHTML = '<div>Aucun CRA</div>';
+            } else {
+                let shtml = `<div class="cra-summary-top"><strong>Total jours travaillés:</strong> ${totalDaysAll}</div>`;
+                shtml += '<div class="cra-summary-list">';
+                // sort clients by total desc
+                const sorted = [...clientAgg.values()].sort((a,b) => b.total - a.total);
+                for (const info of sorted) {
+                    shtml += `<div class="cra-client">`;
+                    shtml += `<div class="cra-client-name"><strong>${info.name}</strong> — Total: ${info.total} jours</div>`;
+                    shtml += `<div class="cra-client-sems">`;
+                    const semKeys = Object.keys(info.semesters).sort().reverse();
+                    for (const sk of semKeys) {
+                        shtml += `<span class="cra-client-sem">${sk}: ${info.semesters[sk]} jours</span>`;
+                    }
+                    shtml += `</div></div>`;
+                }
+                shtml += '</div>';
+                summaryEl.innerHTML = shtml;
+            }
+        }
     }
 
     populateCRAFilters() {
@@ -2129,6 +2222,10 @@ class FreelanceERP {
             notes: document.getElementById('client-notes') ? document.getElementById('client-notes').value : ''
         };
 
+        // include status if available
+        const statusEl = document.getElementById('client-status');
+        if (statusEl) formData.status = statusEl.value || 'active';
+
         if (!/^\d{9}$/.test(formData.siren)) {
             this.showToast('Le SIREN doit contenir exactement 9 chiffres', 'error');
             return;
@@ -2140,6 +2237,7 @@ class FreelanceERP {
         } else {
             const newClient = {
                 id: Math.max(0, ...this.data.clients.map(c => c.id)) + 1,
+                status: formData.status || 'active',
                 ...formData,
                 createdAt: new Date().toISOString().split('T')[0]
             };
