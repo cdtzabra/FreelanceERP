@@ -8,7 +8,7 @@ class FreelanceERP {
             invoices: [],
             cras: [],
             operations: [],
-            company: {  // <-- AJOUT
+            company: {
                 name: '',
                 address: '',
                 phone: '',
@@ -600,16 +600,7 @@ class FreelanceERP {
             const m = c.month || 'unknown';
             revenueByMonth[m] = (revenueByMonth[m] || 0) + total;
         });
-        // invoices paid in the selected year also contribute to revenueByMonth (paidDate or date)
-        // (filtered.invoices || []).forEach(inv => {
-        //     const dateStr = inv.paidDate || inv.date;
-        //     if (!dateStr) return;
-        //     const ym = dateStr.slice(0,7);
-        //     const amountHT = inv.amount || 0;
-        //     const vat = amountHT * ((inv.vatRate || 0) / 100);
-        //     const total = amountHT + vat;
-        //     revenueByMonth[ym] = (revenueByMonth[ym] || 0) + total;
-        // });
+
         const bestRevenueEntry = Object.entries(revenueByMonth).sort((a,b) => b[1] - a[1])[0];
         const bestRevenueLabel = bestRevenueEntry ? `${this.formatMonth(bestRevenueEntry[0])} — ${Number(bestRevenueEntry[1]).toLocaleString('fr-FR')} €` : '—';
 

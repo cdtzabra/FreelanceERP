@@ -48,7 +48,7 @@ function requireApiKey(req, res, next) {
 
 // basic auth for frontend
 function basicAuth(req, res, next) {
-    if (!process.env.ERP_AUTH_USER || !process.env.ERP_AUTH_PASS) return next(); // désactivé si non configuré
+    if (!process.env.ERP_AUTH_USER || !process.env.ERP_AUTH_PASS) return next(); // disable if not set
   
     const b64auth = (req.headers.authorization || '').split(' ')[1] || '';
     const [user, pass] = Buffer.from(b64auth, 'base64').toString().split(':');
@@ -67,8 +67,8 @@ async function main() {
     const db = await initDb(dbFile);
 
     app.disable('x-powered-by');
-    app.use(cors(buildCorsOptions())); // security
-    app.use(basicAuth); // security basic auth
+    app.use(cors(buildCorsOptions()));          // security
+    app.use(basicAuth);                         // security basic auth
     app.use(express.json({ limit: '4mb' }));
 
     app.get('/health', (req, res) => {
@@ -83,14 +83,10 @@ async function main() {
             let payload;
             try {
                 payload = JSON.parse(row.payload);
-                // CORRECTION: S'assurer que company existe dans les données chargées
+                // Ensure payload has all top-level keys
                 if (!payload.company) {
                     payload.company = {};
                 }
-                // Ensure clients have a status (default to 'active') for compatibility #STATUSFIX
-                // if (Array.isArray(payload.clients)) {
-                //     payload.clients = payload.clients.map(c => ({ status: (c && c.status) ? c.status : 'active', ...c }));
-                // }
             } catch (_) {
                 payload = { clients: [], missions: [], invoices: [], cras: [], operations: [], company: {} };
             }
@@ -107,10 +103,7 @@ async function main() {
             if (!payload || typeof payload !== 'object') {
                 return res.status(400).json({ error: 'Body must be { data: {...} }' });
             }
-            // Normalize clients: ensure status exists and defaults to 'active' #STATUSFIX
-            // if (Array.isArray(payload.clients)) {
-            //     payload.clients = payload.clients.map(c => ({ status: (c && c.status) ? c.status : 'active', ...c }));
-            // }
+
             // Server-side validation: ensure referential integrity before saving
             const validation = validatePayload(payload);
             if (!validation.valid) {
@@ -144,14 +137,6 @@ async function main() {
         const missionIds = new Set(missions.map(m => m.id).filter(id => id !== undefined && id !== null));
         const invoiceIds = new Set(invoices.map(i => i.id).filter(id => id !== undefined && id !== null));
         const craIds = new Set(cras.map(c => c.id).filter(id => id !== undefined && id !== null));
-
-        // Client status must be one of allowed values #STATUSFIX
-        // const allowedStatuses = new Set(['active', 'archived']);
-        // clients.forEach(c => {
-        //     if (c && c.status && !allowedStatuses.has(c.status)) {
-        //         errors.push(`Client ${c.id ?? '<no-id>'} has invalid status '${c.status}'`);
-        //     }
-        // });
 
         // Check for duplicate IDs within each collection
         function findDuplicates(arr) {

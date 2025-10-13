@@ -180,11 +180,11 @@ const INVOICE_TEMPLATES = {
     `
 };
 
-// Fonction de substitution de variables (simple mais robuste)
+// Simple template engine to replace {{key}} and handle {{#if condition}}...{{/if}} blocks
 function substituteTemplate(template, data) {
     let result = template;
 
-    // Remplacer les variables simples {{key.subkey}}
+    // Replace variables {{key.subkey}}
     result = result.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
         const keys = path.trim().split('.');
         let value = data;
@@ -194,7 +194,7 @@ function substituteTemplate(template, data) {
         return value !== undefined ? String(value) : '';
     });
 
-    // Remplacer les blocs conditionnels {{#if condition}}...{{/if}}
+    // Replace conditionnal blocks  {{#if condition}}...{{/if}}
     result = result.replace(/\{\{#if\s+([^}]+)\}\}([\s\S]*?)\{\{\/if\}\}/g, (match, condition, content) => {
         const keys = condition.trim().split('.');
         let value = data;
