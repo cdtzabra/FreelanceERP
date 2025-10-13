@@ -651,7 +651,7 @@ class FreelanceERP {
 
     getSelectedYear() {
         // For backward compatibility, this returns the global year
-        return this.globalYear || null;
+        return this.globalYear || new Date().getFullYear().toString() || null;
     }
 
     updateYearBadge() {
@@ -664,7 +664,7 @@ class FreelanceERP {
             badge.style.display = 'none';
             return;
         }
-        label.textContent = `Année : ${y}`;
+        label.textContent = `Année Selectionnée : ${y}`;
         badge.style.display = 'inline-flex';
         clearBtn.onclick = () => {
             this.globalYear = null;
