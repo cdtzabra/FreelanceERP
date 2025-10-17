@@ -1,6 +1,9 @@
 bak_*
 */bak_*
-data.sqlite
+*.sqlite
+*.db
+.env
+*/.env
 node_modules/
 package-lock.json
 *.json

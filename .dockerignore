@@ -1,0 +1,7 @@
+docker-compose.*
+.gitignore
+.env
+*/.env
+*.sqlite
+*.db
+README.md

@@ -3,30 +3,54 @@
 ## Setup
 
 1. Install Node.js >= 18
+
 2. From the project directory:
 ```bash
+# dev
 npm install
+
+# production
+npm install --omit=dev
 ```
 
-3. Create an `.env` file (optional). Defaults are shown:
+3. Create an `.env` file (**optional**). Defaults are shown:
 ```
 PORT=3001
-DB_FILE=./data.sqlite
-ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+DB_DIR=./
+JSON_SIZE_LIMIT=16mb
+#
+ERP_AUTH_USER=admin
+ERP_AUTH_PASSWORD=admin123
+ERP_AUTH_EMAIL=admin@freelance-erp.local
+#
+SESSION_SECRET=change-this-secret-key-in-production
+NODE_ENV= # production or dev
 ```
 
-API keys are passed via `x-api-key` header. For a simple local setup, just send any string; rows are keyed by the provided string.
-
-## Run
+4. Run the app
 ```bash
+# dev
 npm run dev
+
+# prodcution
+npm run production
 ```
-Server runs at http://localhost:3001
+
+Server runs at [http://localhost:3001](http://localhost:3001)
+
 
 ## Endpoints
+
 - GET `/health` → `{ ok: true }`
-- GET `/api/data` (headers: `x-api-key`) → `{ data, updatedAt }`
-- PUT `/api/data` (headers: `x-api-key`, body: `{ data: {...} }`) → `{ ok: true, updatedAt }`
+
+- GET `/api/auth/me`
+- POST `/api/auth/login`
+- POST `/api/auth/logout`
+- POST `/api/auth/change-password`
+
+- GET `/api/web/data`
+- PUT `/api/web/data`
+
 
 ## Notes
 - Data is stored as a JSON blob per API key in SQLite `data_store`.
@@ -34,6 +58,28 @@ Server runs at http://localhost:3001
 
 
 ## docker-compose
+
+
+```Dockerfile
+FROM node:24-alpine
+WORKDIR /app
+
+# SQLite
+RUN apk add --no-cache sqlite
+
+# Copie du backend
+COPY package*.json ./
+RUN npm install --omit=dev
+
+# Copie du backend et du frontend
+COPY . .
+
+# ENV ALLOWED_API_KEYS=key1,key2,key3
+
+EXPOSE 3001
+CMD ["node", "server.js"]
+```
+
 
 ```yaml
 ---
@@ -63,7 +109,7 @@ services:
 ```
 
 
-## mTLS
+## Security Hardening : mTLS
 
 1. Create CA key and self-signed cert (secure ca.key)
 
@@ -332,84 +378,3 @@ Notes:
 This requires no Traefik configuration change and no restart.
 Keep an audit log of revocations (who revoked, when, reason).
 If you want to re-enable the device: set revoked = 0.
-
-
-
-
-
-## Data Model
-
-```json
-{
-  "exportDate": "2025-10-10T15:43:33.058Z",
-  "version": "1.0",
-  "data": {
-    "clients": [
-      {
-        "id": 1,
-        "company": "Societe-1",
-        "siren": "123456789",
-        "address": "Lille",
-        "contact": {
-          "name": "xx",
-          "email": "toto@example.com",
-          "phone": ""
-        },
-        "billingAddress": "",
-        "billingEmail": "compta@example.com",
-        "notes": "",
-        "createdAt": "2025-10-08"
-      }
-    ],
-    "missions": [
-      {
-        "id": 1,
-        "title": "Expertise",
-        "description": "session septembre",
-        "clientId": 2,
-        "startDate": "2025-09-25",
-        "endDate": "2025-09-26",
-        "dailyRate": 600,
-        "status": "Terminée",
-        "createdAt": "2025-10-08"
-      }
-    ],
-    "invoices": [
-      {
-        "id": 1,
-        "number": "FACT-2025-001",
-        "date": "2025-09-30",
-        "clientId": 1,
-        "missionId": 3,
-        "amount": 1800,
-        "vatRate": 20,
-        "status": "Envoyée",
-        "dueDate": "2025-10-31",
-        "paidDate": null,
-        "createdAt": "2025-10-08"
-      }
-    ],
-    "cras": [
-      {
-        "id": 1,
-        "month": "2025-09",
-        "workingDaysInMonth": 22,
-        "missionId": 1,
-        "daysWorked": 3,
-        "notes": "",
-        "createdAt": "2025-10-08"
-      }
-    ],
-    "company": {
-      "name": "xx",
-      "address": "xx",
-      "phone": "xx",
-      "email": "xx",
-      "siret": "xx",
-      "tva_value": "xx",
-      "nda": "xx",
-      "iban": ""
-    }
-  }
-}
-```
