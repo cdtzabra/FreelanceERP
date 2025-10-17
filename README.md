@@ -11,6 +11,11 @@ Designed as a **lightweight alternative** to tools like *Akaunting* or *InvoiceS
 
 ---
 
+![alt text](Screenshots/2-dashboard-2.png)
+
+![alt text](Screenshots/1-login.png)
+
+
 ## 🐳 Run
 
 You can quickly test the app using the published Docker image:
