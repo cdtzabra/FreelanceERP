@@ -49,7 +49,7 @@ NODE_ENV= # production or dev
 
 If you expose the app over the internet, consider using **certificate-based authentication (mTLS)** to restrict access to trusted clients only.
 
-If you’re using Traefik as a reverse proxy, enable it easily with: [clientAuthType: RequireAndVerifyClientCert](https://doc.enoks.fr/traefik/#enabling-mtls)
+If you’re using Traefik as a reverse proxy, enable it easily with: [clientAuthType: RequireAndVerifyClientCert](https://doc.enoks.fr/freelanceERP/#mtls-certificate-based-authentication)
 
 
 ## Development
