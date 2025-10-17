@@ -11,9 +11,9 @@ Designed as a **lightweight alternative** to tools like *Akaunting* or *InvoiceS
 
 ---
 
-![alt text](Screenshots/2-dashboard-2.png)
+![FreelanceERP Dashboard](Screenshots/2-dashboard-2.png)
 
-![alt text](Screenshots/1-login.png)
+![FreelanceERP Login](Screenshots/1-login.png)
 
 
 ## 🐳 Run
