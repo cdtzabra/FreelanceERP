@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FreelanceERP - Connexion</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, var(--color-background) 0%, var(--color-surface) 100%);
+        }
+        
+        .login-container {
+            width: 100%;
+            max-width: 400px;
+            padding: var(--space-24);
+        }
+        
+        .login-card {
+            background: var(--color-surface);
+            border-radius: var(--radius-lg);
+            padding: var(--space-32);
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--color-border);
+        }
+        
+        .login-header {
+            text-align: center;
+            margin-bottom: var(--space-32);
+        }
+        
+        .login-header h1 {
+            color: var(--color-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-12);
+            font-size: var(--font-size-3xl);
+            margin-bottom: var(--space-8);
+        }
+        
+        .login-header p {
+            color: var(--color-text-secondary);
+            margin: 0;
+        }
+        
+        .login-form {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-20);
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-8);
+        }
+        
+        .form-group label {
+            font-weight: var(--font-weight-medium);
+            color: var(--color-text);
+            font-size: var(--font-size-sm);
+        }
+        
+        .input-group {
+            position: relative;
+        }
+        
+        .input-group i {
+            position: absolute;
+            left: var(--space-12);
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--color-text-secondary);
+            width: 20px;
+        }
+        
+        .input-group input {
+            padding-left: 40px;
+            width: 100%;
+        }
+        
+        .error-message {
+            display: none;
+            background: rgba(var(--color-error-rgb), 0.1);
+            color: var(--color-error);
+            padding: var(--space-12);
+            border-radius: var(--radius-base);
+            font-size: var(--font-size-sm);
+            border: 1px solid rgba(var(--color-error-rgb), 0.2);
+            margin-bottom: var(--space-16);
+        }
+        
+        .error-message.show {
+            display: block;
+        }
+        
+        .success-message {
+            display: none;
+            background: rgba(var(--color-success-rgb), 0.1);
+            color: var(--color-success);
+            padding: var(--space-12);
+            border-radius: var(--radius-base);
+            font-size: var(--font-size-sm);
+            border: 1px solid rgba(var(--color-success-rgb), 0.2);
+            margin-bottom: var(--space-16);
+        }
+        
+        .success-message.show {
+            display: block;
+        }
+        
+        .btn-login {
+            width: 100%;
+            padding: var(--space-12);
+            margin-top: var(--space-8);
+            font-size: var(--font-size-md);
+            font-weight: var(--font-weight-medium);
+        }
+        
+        .remember-me {
+            display: flex;
+            align-items: center;
+            gap: var(--space-8);
+            font-size: var(--font-size-sm);
+            color: var(--color-text-secondary);
+        }
+        
+        .remember-me input[type="checkbox"] {
+            margin: 0;
+        }
+        
+        .login-footer {
+            text-align: center;
+            margin-top: var(--space-32);
+            padding-top: var(--space-24);
+            border-top: 1px solid var(--color-border);
+            color: var(--color-text-secondary);
+            font-size: var(--font-size-sm);
+        }
+        
+        .loading {
+            display: none;
+        }
+        
+        .loading.show {
+            display: inline-block;
+            margin-left: var(--space-8);
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .loading i {
+            animation: spin 1s linear infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <h1><i class="fas fa-briefcase"></i> FreelanceERP</h1>
+                <p>Connectez-vous à votre espace</p>
+            </div>
+            
+            <div id="error-message" class="error-message"></div>
+            <div id="success-message" class="success-message"></div>
+            
+            <form id="login-form" class="login-form">
+                <div class="form-group">
+                    <label for="username">Nom d'utilisateur</label>
+                    <div class="input-group">
+                        <i class="fas fa-user"></i>
+                        <input 
+                            type="text" 
+                            id="username" 
+                            name="username" 
+                            class="form-control" 
+                            placeholder="Entrez votre identifiant"
+                            required 
+                            autocomplete="username"
+                        >
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Mot de passe</label>
+                    <div class="input-group">
+                        <i class="fas fa-lock"></i>
+                        <input 
+                            type="password" 
+                            id="password" 
+                            name="password" 
+                            class="form-control" 
+                            placeholder="Entrez votre mot de passe"
+                            required
+                            autocomplete="current-password"
+                        >
+                    </div>
+                </div>
+                
+                <div class="remember-me">
+                    <input type="checkbox" id="remember" name="remember">
+                    <label for="remember">Se souvenir de moi</label>
+                </div>
+                
+                <button type="submit" class="btn btn--primary btn-login">
+                    Se connecter
+                    <span class="loading" id="loading"><i class="fas fa-spinner"></i></span>
+                </button>
+            </form>
+            
+            <div class="login-footer">
+                <p>© 2025 FreelanceERP - Version 1.0.0</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('error-message');
+            const successDiv = document.getElementById('success-message');
+            const loadingSpan = document.getElementById('loading');
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            
+            // Reset messages
+            errorDiv.classList.remove('show');
+            successDiv.classList.remove('show');
+            
+            // Show loading
+            loadingSpan.classList.add('show');
+            submitBtn.disabled = true;
+            
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password }),
+                    credentials: 'include'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    successDiv.textContent = 'Connexion réussie! Redirection...';
+                    successDiv.classList.add('show');
+                    
+                    // Redirect to main app after short delay
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 1000);
+                } else {
+                    errorDiv.textContent = data.error || 'Identifiants invalides';
+                    errorDiv.classList.add('show');
+                }
+            } catch (error) {
+                errorDiv.textContent = 'Erreur de connexion. Veuillez réessayer.';
+                errorDiv.classList.add('show');
+            } finally {
+                loadingSpan.classList.remove('show');
+                submitBtn.disabled = false;
+            }
+        });
+        
+        // Auto-focus username field
+        document.getElementById('username').focus();
+    </script>
+</body>
+</html>

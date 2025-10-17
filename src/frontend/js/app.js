@@ -19,17 +19,28 @@ class FreelanceERP {
                 iban: ''
             }
         };
-        this.backend = { url: '', apiKey: '' };
+        // this.backend = { url: '', apiKey: '' };
+        this.backend = { url: window.location.origin};
         this.globalYear = null; // shared year filter across pages (null = all)
         this.showArchivedClients = false; // UI toggle to display archived clients in clients list
         this.suppressRemoteSync = false;
         this.init();
     }
 
-    init() {
+/* ----------------------------------------------------
+   INIT function
+------------------------------------------------------ */
+    async init() {
+        // Check authentication first
+        const ok = await this.checkAuth();
+        if (!ok) {
+            window.location.href = '/login.html';
+            return;
+        }
+
         // Prevent remote sync during initial boot until we've tried pulling remote data
         this.suppressRemoteSync = true;
-        this.loadBackendConfig();
+        // this.loadBackendConfig();
         // this.loadCompanyConfig();
         this.initializeEventListeners();
         this.showPage('dashboard');
@@ -39,49 +50,76 @@ class FreelanceERP {
         this.$('#btn-import').onclick = () => this.$('#file-input').click();
         this.$('#file-input').onchange = e => this.onFileSelected(e);
 
-        // Backend sync handlers
-        const backendBtn = this.$('#btn-backend-config');
-        const syncBtn = this.$('#btn-sync');
-        if (backendBtn) backendBtn.onclick = () => this.configureBackend();
-        if (syncBtn) syncBtn.onclick = () => this.syncLoadFromServer();
         const companyBtn = this.$('#btn-company');
         if (companyBtn) companyBtn.onclick = () => this.showCompanyForm();
 
-        // CORRECTION: Auto-load from backend if configured
-        if (this.backend.url && this.backend.apiKey) {
-            this.syncLoadFromServer().then(() => {
-                this.updateDashboard();
-            }).finally(() => {
-                this.suppressRemoteSync = false;
-            });
+        // Auto-load from backend 
+        // this.updateDashboard();
+        if (this.backend.url) {
+        this.syncLoadFromServer().then(() => {
+        	this.updateDashboard();
+        }).finally(() => {
+        	this.suppressRemoteSync = false;
+        });
         } else {
             // No backend configured - just update dashboard with empty data
             this.updateDashboard();
             this.suppressRemoteSync = false;
         }
+
         // Populate dashboard year filter and listen to changes
-        const yearSelect = document.getElementById('dashboard-year-filter');
-        if (yearSelect) {
-            yearSelect.addEventListener('change', (e) => {
-                // set global shared year filter
-                const v = e.target.value || null;
-                this.globalYear = v;
-                // when global changes, update all pages and charts so the change is dynamic regardless of current page
-                this.updateDashboard();
-                this.renderCharts();
-                // re-render other pages so the new filter is reflected immediately
-                this.renderMissions();
-                this.renderCRAs();
-                this.renderInvoices();
-                this.renderOperations();
-                this.updateYearBadge();
+        this.attachDashboardYearListener();
+    //     const yearSelect = document.getElementById('dashboard-year-filter');
+    //     if (yearSelect) {
+    //         yearSelect.addEventListener('change', (e) => {
+    //             // set global shared year filter
+    //             const v = e.target.value || null;
+    //             this.globalYear = v;
+    //             // when global changes, update all pages and charts so the change is dynamic regardless of current page
+    //             this.updateDashboard();
+    //             this.renderCharts();
+    //             // re-render other pages so the new filter is reflected immediately
+    //             this.renderMissions();
+    //             this.renderCRAs();
+    //             this.renderInvoices();
+    //             this.renderOperations();
+    //             this.updateYearBadge();
+    //         });
+    //     }
+
+
+    }
+// END INIT
+
+
+/* ----------------------------------------------------
+    Functions to handle authentication: login - logout
+------------------------------------------------------ */
+    async checkAuth() {
+        try {
+            const res = await fetch('/api/auth/me', {
+                method: 'GET',
+                credentials: 'include'
             });
+            if (res.status === 401) return false;
+            if (!res.ok) return false;
+            const user = await res.json();
+            this.currentUser = user;
+            return !!user?.id;
+        } catch {
+            return false;
         }
     }
-    // INIT end
+
+    async logout() {
+        await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+        window.location.href = '/login.html';
+    }
 
 
-
+/* ----------------------------------------------------
+    Getter/Setter 
+------------------------------------------------------ */
     $(selector) {
         return document.querySelector(selector);
     }
@@ -94,6 +132,9 @@ class FreelanceERP {
         this.data.company = value;
     }
 
+/* ----------------------------------------------------
+    Import /Export Data block
+------------------------------------------------------ */
     onExport() {
         try {
             const exportData = {
@@ -193,10 +234,6 @@ class FreelanceERP {
         });
     }
 
-    async importExcel(file) {
-        // Excel and CSV imports removed — only JSON import is supported now
-    }
-
     mergeData(importedData) {
         const maxClientId = Math.max(0, ...this.data.clients.map(c => c.id));
         const maxMissionId = Math.max(0, ...this.data.missions.map(m => m.id));
@@ -239,18 +276,12 @@ class FreelanceERP {
             });
         }
     }
+// END
 
-
-    /* -------------------------
-    Save Data in SQLite
-    ------------------------- */
+/* --------------------------------------------------------------------
+    Save / Sync Da bloc
+------------------------------------------------------------------------ */
     async saveData() {
-        // Return boolean indicating whether remote sync succeeded (or not needed).
-        if (!this.backend.url || !this.backend.apiKey) {
-            // No backend configured — consider save successful locally
-            return true;
-        }
-
         try {
             if (!this.suppressRemoteSync) {
                 await this.syncSaveToServerSilent();
@@ -263,114 +294,24 @@ class FreelanceERP {
         }
     }
 
-
-    loadBackendConfig() {
-        try {
-            const raw = localStorage.getItem('freelanceERPBackend');
-            if (raw) {
-                const cfg = JSON.parse(raw);
-                this.backend = { url: cfg.url || '', apiKey: cfg.apiKey || '' };
-            } else {
-                this.backend = { url: window.location.origin, apiKey: '' };
-            }
-        } catch (_) {
-            this.backend = { url: window.location.origin, apiKey: '' };
-        }
-    }
-
-    saveBackendConfig() {
-        localStorage.setItem('freelanceERPBackend', JSON.stringify(this.backend));
-    }
-
-    configureBackend() {
-        const currentUrl = this.backend.url || window.location.origin;
-        const url = prompt('Backend URL (ex: http://localhost:3001)', currentUrl);
-        if (url === null) return;
-        const trimmed = (url || '').trim();
-        if (!trimmed || !/^https?:\/\//.test(trimmed)) {
-            this.showToast('URL invalide', 'error');
-            return;
-        }
-        const currentKey = this.backend.apiKey || '';
-        const apiKey = prompt('API Key (x-api-key)', currentKey);
-        if (apiKey === null) return;
-        
-        this.backend = { url: trimmed.replace(/\/$/, ''), apiKey: (apiKey || '').trim() };
-        this.saveBackendConfig();
-        
-        // CORRECTION: Charger immédiatement les données après configuration
-        if (this.backend.url && this.backend.apiKey) {
-            this.syncLoadFromServer().then(() => {
-                this.showToast('Configuration backend enregistrée et données chargées', 'success');
-            }).catch(() => {
-                this.showToast('Configuration enregistrée mais échec du chargement des données', 'warning');
-            });
-        } else {
-            this.showToast('Configuration backend enregistrée', 'success');
-        }
-    }
-
-    showCompanyForm() {
-        document.getElementById('modal-title').textContent = 'Paramètres Société';
-        const c = this.company || {};
-        document.getElementById('modal-body').innerHTML = `
-            <form id="company-form">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label class="form-label" for="comp-name">Nom</label>
-                        <input type="text" id="comp-name" class="form-control" value="${c.name || ''}">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="comp-phone">Téléphone</label>
-                        <input type="text" id="comp-phone" class="form-control" value="${c.phone || ''}">
-                    </div>
-                </div>
-                <div class="form-row full-width">
-                    <div class="form-group">
-                        <label class="form-label" for="comp-address">Adresse</label>
-                        <textarea id="comp-address" class="form-control">${c.address || ''}</textarea>
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label class="form-label" for="comp-email">Email</label>
-                        <input type="email" id="comp-email" class="form-control" value="${c.email || ''}">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="comp-siret">SIRET</label>
-                        <input type="text" id="comp-siret" class="form-control" value="${c.siret || ''}">
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label class="form-label" for="comp-tva">TVA (tva_id)</label>
-                        <input type="text" id="comp-tva" class="form-control" value="${c.tva_id || ''}">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="comp-nda">NDA</label>
-                        <input type="text" id="comp-nda" class="form-control" value="${c.nda || ''}">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="comp-iban">IBAN</label>
-                        <input type="text" id="comp-iban" class="form-control" value="${c.iban || ''}">
-                    </div>
-                </div>
-            </form>
-        `;
-        this.currentFormType = 'company';
-        this.showModal();
-    }
-
     async syncLoadFromServer() {
-        if (!this.backend.url || !this.backend.apiKey) {
+        // if (!this.backend.url || !this.backend.apiKey) {
+        if (!this.backend.url) {
             this.showToast('Backend non configuré', 'error');
             return;
         }
         try {
-            const res = await fetch(`${this.backend.url}/api/data`, {
+            const res = await fetch('/api/web/data', {
                 method: 'GET',
-                headers: { 'x-api-key': this.backend.apiKey }
+                credentials: 'include',
+                // headers: { 'x-api-key': this.backend.apiKey }
             });
+
+            if (res.status === 401) {
+                window.location.href = '/login.html';
+                return;
+            }
+
             if (!res.ok) throw new Error('HTTP ' + res.status);
             const payload = await res.json();
             if (payload && payload.data) {
@@ -391,20 +332,27 @@ class FreelanceERP {
     }
 
     async syncSaveToServer() {
-        if (!this.backend.url || !this.backend.apiKey) {
+        // if (!this.backend.url || !this.backend.apiKey) {
+        if (!this.backend.url) {
             this.showToast('Backend non configuré', 'error');
             this._lastServerError = { error: 'Backend non configuré' };
             return false;
         }
         try {
-            const res = await fetch(`${this.backend.url}/api/data`, {
+            const res = await fetch('/api/web/data', {
                 method: 'PUT',
+               credentials: 'include',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': this.backend.apiKey
+                    'Content-Type': 'application/json'
+                    // 'x-api-key': this.backend.apiKey
                 },
                 body: JSON.stringify({ data: this.data })
             });
+            if (res.status === 401) {
+                window.location.href = '/login.html';
+                return;
+            }
+
             if (!res.ok) {
                 // try to parse response body
                 let details = null;
@@ -424,16 +372,22 @@ class FreelanceERP {
     }
 
     async syncSaveToServerSilent() {
-        if (!this.backend.url || !this.backend.apiKey) return;
+        if (!this.backend.url) return;
         try {
-            const res = await fetch(`${this.backend.url}/api/data`, {
+            const res = await fetch('api/web/data', {
                 method: 'PUT',
+                credentials: 'include',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': this.backend.apiKey
+                    'Content-Type': 'application/json'
+                    // 'x-api-key': this.backend.apiKey
                 },
                 body: JSON.stringify({ data: this.data })
             });
+            if (res.status === 401) {
+                window.location.href = '/login.html';
+                return;
+            }
+            
             if (!res.ok) {
                 try { this._lastServerError = await res.json(); } catch (_) { this._lastServerError = { status: res.status, text: await res.text() }; }
             } else {
@@ -441,6 +395,10 @@ class FreelanceERP {
             }
         } catch (_) { /* ignore */ }
     }
+
+/* --------------------------------------------------------------------
+    END Save / Sync Data bloc
+------------------------------------------------------------------------ */
 
     initializeEventListeners() {
         document.querySelectorAll('.nav-link').forEach(link => {
@@ -451,19 +409,21 @@ class FreelanceERP {
             });
         });
 
+        document.getElementById('logout-btn').addEventListener('click', () => this.logout());
+
         document.getElementById('quick-action-btn').addEventListener('click', () => {
             this.handleQuickAction();
         });
 
         document.getElementById('add-client-btn').addEventListener('click', () => this.showClientForm());
-    const toggleArchived = document.getElementById('toggle-show-archived');
-    if (toggleArchived) toggleArchived.addEventListener('change', (e) => { this.showArchivedClients = !!e.target.checked; this.renderClients(); });
+        const toggleArchived = document.getElementById('toggle-show-archived');
+        if (toggleArchived) toggleArchived.addEventListener('change', (e) => { this.showArchivedClients = !!e.target.checked; this.renderClients(); });
         document.getElementById('add-mission-btn').addEventListener('click', () => this.showMissionForm());
         document.getElementById('add-invoice-btn').addEventListener('click', () => this.showInvoiceForm());
         document.getElementById('add-cra-btn').addEventListener('click', () => this.showCRAForm());
-    // Operations
-    const addOpBtn = document.getElementById('add-operation-btn');
-    if (addOpBtn) addOpBtn.addEventListener('click', () => this.showOperationForm());
+        // Operations
+        const addOpBtn = document.getElementById('add-operation-btn');
+        if (addOpBtn) addOpBtn.addEventListener('click', () => this.showOperationForm());
 
         document.getElementById('modal-close').addEventListener('click', () => this.closeModal());
         document.getElementById('modal-cancel').addEventListener('click', () => this.closeModal());
@@ -471,12 +431,11 @@ class FreelanceERP {
 
         document.getElementById('mission-status-filter').addEventListener('change', () => this.renderMissions());
         document.getElementById('mission-client-filter').addEventListener('change', () => this.renderMissions());
-    // Per-page year selects removed; global header filter drives page filtering
+        // Per-page year selects removed; global header filter drives page filtering
         document.getElementById('invoice-status-filter').addEventListener('change', () => this.renderInvoices());
-    // invoiceYearEl removed - global header drives year selection
-    document.getElementById('cra-month-filter').addEventListener('change', () => this.renderCRAs());
-    // craYearEl removed - global header drives year selection
-
+        // invoiceYearEl removed - global header drives year selection
+        document.getElementById('cra-month-filter').addEventListener('change', () => this.renderCRAs());
+        // craYearEl removed - global header drives year selection
 
         document.getElementById('modal').addEventListener('click', (e) => {
             if (e.target.id === 'modal') {
@@ -569,7 +528,7 @@ class FreelanceERP {
 
         const activeMissions = filtered.missions.filter(m => m.status === 'En cours').length;
         const pendingInvoices = filtered.invoices.filter(i => i.status === 'Envoyée').length;
-    const totalClients = (this.data.clients || []).filter(c => (c.status || 'active') === 'active').length; // only count active clients
+        const totalClients = (this.data.clients || []).filter(c => (c.status || 'active') === 'active').length; // only count active clients
 
         document.getElementById('total-revenue').textContent = `${totalRevenue.toLocaleString('fr-FR')} €`;
         document.getElementById('pending-revenue').textContent = `${pendingRevenue.toLocaleString('fr-FR')} €`;
@@ -618,26 +577,90 @@ class FreelanceERP {
         this.populateInvoiceFilters();
     }
 
+
+    attachDashboardYearListener() {
+        const yearSelect = document.getElementById('dashboard-year-filter');
+        if (!yearSelect) return;
+        
+        // Supprimer l'ancien listener si présent
+        const newSelect = yearSelect.cloneNode(true);
+        yearSelect.parentNode.replaceChild(newSelect, yearSelect);
+        
+        // Attacher le nouveau listener
+        newSelect.addEventListener('change', (e) => {
+            // set global shared year filter
+            const v = e.target.value || null;
+            this.globalYear = v;
+            // when global changes, update all pages and charts so the change is dynamic regardless of current page
+            this.updateDashboard();
+            this.renderCharts();
+            // re-render other pages so the new filter is reflected immediately
+            this.renderMissions();
+            this.renderCRAs();
+            this.renderInvoices();
+            this.renderOperations();
+            this.updateYearBadge();
+        });
+    }
+
     populateInvoiceFilters() {
         const yearSelect = document.getElementById('invoice-year-filter');
         if (!yearSelect) return;
         const years = this.getAvailableYears();
-    yearSelect.innerHTML = '<option value="">Toutes les années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
-    yearSelect.value = this.globalYear || '';
-    this.updateYearBadge();
+        const currentYear = new Date().getFullYear().toString();
+
+        let html = '<option value="">Toutes les années</option>';
+        html += `<option value="${currentYear}">Cette année (${currentYear})</option>`;
+        html += years.filter(y => y !== currentYear).map(y => `<option value="${y}">${y}</option>`).join('');
+        yearSelect.innerHTML = html;
+
+        yearSelect.value = this.globalYear || '';
+        this.updateYearBadge();
     }
 
+    // populateDashboardYearFilter() {
+    //     const select = document.getElementById('dashboard-year-filter');
+    //     if (!select) return;
+    //     const years = this.getAvailableYears();
+    //     const existing = select.value || '';
+    //     let html = '<option value="">Toutes les années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+    //     select.innerHTML = html;
+    //     // prefer the shared global year if set, otherwise keep previous selection
+    //     if (this.globalYear) select.value = this.globalYear; else if (existing) select.value = existing;
+    //     this.updateYearBadge();
+    // }
     populateDashboardYearFilter() {
         const select = document.getElementById('dashboard-year-filter');
         if (!select) return;
         const years = this.getAvailableYears();
+        const currentYear = new Date().getFullYear().toString();
         const existing = select.value || '';
-        let html = '<option value="">Toutes les années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+        
+        let html = '<option value="">Toutes les années</option>';
+        html += `<option value="${currentYear}">Cette année (${currentYear})</option>`;
+        html += years.filter(y => y !== currentYear).map(y => `<option value="${y}">${y}</option>`).join('');
         select.innerHTML = html;
-        // prefer the shared global year if set, otherwise keep previous selection
-        if (this.globalYear) select.value = this.globalYear; else if (existing) select.value = existing;
+        
+        // Si aucun filtre global n'est défini et aucune valeur existante, utiliser l'année courante par défaut
+        if (this.globalYear) {
+            select.value = this.globalYear;
+        } else if (existing) {
+            select.value = existing;
+        } else if (!this._yearInitialized) {
+            // Une seule fois au tout premier chargement
+            select.value = currentYear;
+            this.globalYear = currentYear;
+            this._yearInitialized = true;
+        } 
+        // else {
+        //     select.value = '';
+        // }
+
+        // Réattacher le listener après avoir modifié le HTML
+        this.attachDashboardYearListener();     
         this.updateYearBadge();
     }
+
 
     getAvailableYears() {
         const years = new Set();
@@ -747,6 +770,57 @@ class FreelanceERP {
                 <span>${c.iban || ''}</span>
             </div>
         `;
+    }
+
+    showCompanyForm() {
+        document.getElementById('modal-title').textContent = 'Paramètres Société';
+        const c = this.company || {};
+        document.getElementById('modal-body').innerHTML = `
+            <form id="company-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="comp-name">Nom</label>
+                        <input type="text" id="comp-name" class="form-control" value="${c.name || ''}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="comp-phone">Téléphone</label>
+                        <input type="text" id="comp-phone" class="form-control" value="${c.phone || ''}">
+                    </div>
+                </div>
+                <div class="form-row full-width">
+                    <div class="form-group">
+                        <label class="form-label" for="comp-address">Adresse</label>
+                        <textarea id="comp-address" class="form-control">${c.address || ''}</textarea>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="comp-email">Email</label>
+                        <input type="email" id="comp-email" class="form-control" value="${c.email || ''}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="comp-siret">SIRET</label>
+                        <input type="text" id="comp-siret" class="form-control" value="${c.siret || ''}">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="comp-tva">TVA (tva_id)</label>
+                        <input type="text" id="comp-tva" class="form-control" value="${c.tva_id || ''}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="comp-nda">NDA</label>
+                        <input type="text" id="comp-nda" class="form-control" value="${c.nda || ''}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="comp-iban">IBAN</label>
+                        <input type="text" id="comp-iban" class="form-control" value="${c.iban || ''}">
+                    </div>
+                </div>
+            </form>
+        `;
+        this.currentFormType = 'company';
+        this.showModal();
     }
 
     renderCharts() {
@@ -960,7 +1034,13 @@ class FreelanceERP {
         const yearSelect = document.getElementById('operation-year-filter');
         if (yearSelect) {
             const years = this.getAvailableYears();
-            yearSelect.innerHTML = '<option value="">Toutes les années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+            const currentYear = new Date().getFullYear().toString();
+
+            let html = '<option value="">Toutes les années</option>';
+            html += `<option value="${currentYear}">Cette année (${currentYear})</option>`;
+            html += years.filter(y => y !== currentYear).map(y => `<option value="${y}">${y}</option>`).join('');
+            yearSelect.innerHTML = html;
+
             yearSelect.value = this.globalYear || '';
             yearSelect.addEventListener('change', (e) => { this.globalYear = e.target.value || null; this.renderOperations(); this.renderCharts(); this.updateYearBadge(); });
         }
@@ -1113,8 +1193,6 @@ class FreelanceERP {
             } catch (e) { /* ignore chart errors */ }
         }
     }
-
-    
 
     showOperationForm(opId = null) {
         const op = opId ? (this.data.operations || []).find(o => o.id === opId) : null;
@@ -1407,7 +1485,13 @@ class FreelanceERP {
         const yearSelect = document.getElementById('mission-year-filter');
         if (yearSelect) {
             const years = this.getAvailableYears();
-            yearSelect.innerHTML = '<option value="">Toutes les années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+            const currentYear = new Date().getFullYear().toString();
+
+            let html = '<option value="">Toutes les années</option>';
+            html += `<option value="${currentYear}">Cette année (${currentYear})</option>`;
+            html += years.filter(y => y !== currentYear).map(y => `<option value="${y}">${y}</option>`).join('');
+            yearSelect.innerHTML = html;
+
             yearSelect.value = this.globalYear || '';
         }
         this.updateYearBadge();
@@ -1645,13 +1729,17 @@ class FreelanceERP {
         const yearFilter = document.getElementById('cra-year-filter');
         const months = [...new Set(this.data.cras.map(cra => cra.month))].sort().reverse();
         const years = [...new Set(this.data.cras.map(cra => cra.month ? cra.month.split('-')[0] : null).filter(Boolean))].sort().reverse();
+        const currentYear = new Date().getFullYear().toString();
 
         if (monthFilter) {
             monthFilter.innerHTML = '<option value="">Tous les mois</option>' +
                 months.map(month => `<option value="${month}">${this.formatMonth(month)}</option>`).join('');
         }
         if (yearFilter) {
-            yearFilter.innerHTML = '<option value="">Toutes les années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+            let html = '<option value="">Toutes les années</option>';
+            html += `<option value="${currentYear}">Cette année (${currentYear})</option>`;
+            html += years.filter(y => y !== currentYear).map(y => `<option value="${y}">${y}</option>`).join('');
+            yearFilter.innerHTML = html;
             // set to follow global by default
             yearFilter.value = this.globalYear || '';
         }
@@ -1730,7 +1818,7 @@ class FreelanceERP {
 
         const amount = cra.daysWorked * mission.dailyRate;
         
-        // Créer une facture avec les données du CRA
+        // Create an invoice with CRAs data
         this.showInvoiceForm(null, mission, amount, cra);
     }
 
@@ -1776,17 +1864,7 @@ class FreelanceERP {
     }
 
 
-    renderSettings() {
-        const backendUrlEl = document.getElementById('backend-url');
-        const backendKeyEl = document.getElementById('backend-key');
-        if (backendUrlEl) backendUrlEl.textContent = this.backend.url || 'Non configuré';
-        // if (backendKeyEl) backendKeyEl.textContent = this.backend.apiKey || 'Non défini';
-        if (backendKeyEl) {
-        const key = this.backend.apiKey;
-        // display only last 4 characters for security
-        backendKeyEl.textContent = key ? '*'.repeat(key.length - 4) + key.slice(-4) : 'Non défini';
-        }
-    
+    renderSettings() { 
         const company = this.company || {};
         const el = document.getElementById('company-summary');
         if (el) {
@@ -1794,8 +1872,52 @@ class FreelanceERP {
                 ? `<p><strong>${company.name}</strong><br>${company.address || ''}<br>${company.email || ''}</p>`
                 : '<p style="color:var(--color-text-secondary);">Aucune information société configurée.</p>';
         }
-    }
+
+        // change password
+        const form = document.getElementById('change-password-form');
+        if (!form) return;
     
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const msg = document.getElementById('pw-change-msg');
+            msg.textContent = '';
+            msg.style.color = '';
+    
+            const currentPassword = document.getElementById('currentPassword').value.trim();
+            const newPassword = document.getElementById('newPassword').value.trim();
+    
+            if (!currentPassword || !newPassword) {
+                msg.textContent = 'Veuillez remplir tous les champs.';
+                msg.style.color = 'var(--color-error)';
+                return;
+            }
+    
+            try {
+                const res = await fetch('/api/auth/change-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ currentPassword, newPassword })
+                });
+    
+                const data = await res.json();
+                if (res.ok) {
+                    msg.textContent = 'Mot de passe mis à jour avec succès.';
+                    msg.style.color = 'var(--color-success)';
+                    form.reset();
+                } else {
+                    msg.textContent = data.error || 'Erreur lors du changement de mot de passe.';
+                    msg.style.color = 'var(--color-error)';
+                }
+            } catch (err) {
+                msg.textContent = 'Erreur réseau ou serveur.';
+                msg.style.color = 'var(--color-error)';
+            }
+        });
+
+
+
+    }
 
     renderInvoices() {
         const statusFilter = document.getElementById('invoice-status-filter').value;
@@ -2390,15 +2512,14 @@ class FreelanceERP {
             nda: document.getElementById('comp-nda').value,
             iban: document.getElementById('comp-iban').value
         };
-        // CORRECTION: Sauvegarder dans SQLite via saveData()
+        //Save data with saveData()
         this.saveData();
-        // CORRECTION: Mettre à jour tous les affichages
+        // update display
         this.renderCompanyInfo();
         this.renderCompanyHeader();
         this.closeModal();
         this.showToast('Informations société enregistrées', 'success');
     }
-
 
     getStatusClass(status) {
         switch (status) {

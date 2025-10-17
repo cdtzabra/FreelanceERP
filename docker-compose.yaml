@@ -1,0 +1,35 @@
+---
+networks:
+  zabra:
+    external: true
+
+services:
+  ferp:
+    # build: .
+    image: zabradocker/ferp:1.0.0
+    container_name: ferp
+    hostname: "ferp.enoks.fr"
+    restart: always
+    networks:
+      - zabra
+    expose:
+      - "3033"
+    volumes:
+      # to mount src
+      # - ./src:/app/erp
+      - /application/apps/ferp:/opt/data:rw
+    environment:
+      # - DB_DIR=/opt/data/
+      - PORT=3033
+      - ERP_AUTH_USER=${ERP_AUTH_USER}
+      - ERP_AUTH_PASSWORD=${ERP_AUTH_PASSWORD}
+      - ERP_AUTH_EMAIL=${ERP_AUTH_EMAIL}
+      - SESSION_SECRET=${SESSION_SECRET}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ferp.rule=Host(`ferp.enoks.fr`)"
+      - "traefik.http.routers.ferp.entrypoints=websecure"
+      - "traefik.http.routers.ferp.tls=true"
+      - "traefik.http.routers.ferp.tls.certresolver=letsencrypt"
+      # Use mTLS only for this router (file provider target)
+      #- "traefik.http.routers.ferp.tls.options=mtls-required@file"
