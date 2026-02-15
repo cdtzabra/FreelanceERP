@@ -6,4 +6,3 @@ bak_*
 */.env
 node_modules/
 package-lock.json
-*.json

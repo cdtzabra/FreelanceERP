@@ -1,19 +1,38 @@
-ARG NODE_VERSION=24-alpine
-FROM node:${NODE_VERSION}
+# ============================
+# 1. Build stage
+# ============================
+ARG NODE_VERSION=25-alpine
+FROM node:${NODE_VERSION} AS builder
+
+WORKDIR /app/erp
+
+# Copy dependency files
+COPY src/package*.json ./
+
+# Install dependencies (including dev dependencies for build)
+RUN npm install --omit=dev
+
+# Copy source code
+COPY src/ .
+
+# ============================
+# 2. Runtime stage
+# ============================
+FROM node:${NODE_VERSION} AS runtime
 
 LABEL maintainer="Enoks - CdtZabra" \
       website="https://enoks.fr" \
       node_version="${NODE_VERSION}"
 
-ENV DB_DIR=/opt/data
-
-RUN mkdir -p /app/erp /opt/data && apk add --no-cache sqlite
-
+ARG DB_DIR=/opt/data
+ENV DB_DIR=${DB_DIR} 
 WORKDIR /app/erp
 
-COPY src/package*.json ./
-RUN npm install --omit=dev
+RUN mkdir -p ${DB_DIR} && apk add --no-cache sqlite
 
-COPY src/ .
+# Copy  only necessary files from builder stage
+COPY --from=builder /app/erp /app/erp
+
+EXPOSE 3001
 
 CMD ["node", "server.js"]

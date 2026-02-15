@@ -1973,11 +1973,24 @@ class FreelanceERP {
             activityMonth = `${year}-${month}`;
         }
         
-        // predict invoice number based on next id and chosen date so the user sees the final number
-        const predictedId = Math.max(0, ...this.data.invoices.map(i => i.id)) + 1;
+        // predict invoice number based on chosen date so the user sees the final number
         const invoiceDateForPrediction = invoice ? invoice.date : invoiceDate;
         const yearForPrediction = (invoiceDateForPrediction || new Date().toISOString().split('T')[0]).slice(0,4);
-        const predictedNumber = `FA${yearForPrediction.slice(-2)}-1${String(predictedId).padStart(4,'0')}`;
+        const yearShortForPrediction = yearForPrediction.slice(-2);
+        
+        // Find max sequence number for the prediction year
+        const regexForPrediction = new RegExp(`FA${yearShortForPrediction}-1(\\d{4,})`, 'i');
+        let maxSeqForPrediction = 0;
+        for (const inv of this.data.invoices || []) {
+            if (!inv || !inv.number) continue;
+            const m = String(inv.number).match(regexForPrediction);
+            if (m && m[1]) {
+                const seq = parseInt(m[1], 10);
+                if (!isNaN(seq) && seq > maxSeqForPrediction) maxSeqForPrediction = seq;
+            }
+        }
+        const nextSeqForPrediction = maxSeqForPrediction + 1;
+        const predictedNumber = `FA${yearShortForPrediction}-1${String(nextSeqForPrediction).padStart(4,'0')}`;
 
         // Compute quantity par défaut
         let defaultQuantity = 1;
@@ -2447,8 +2460,20 @@ class FreelanceERP {
             // determine year from the invoice date (fall back to current year)
             const invoiceYear = formData.date ? formData.date.slice(0,4) : (new Date().getFullYear().toString());
             const yearShort = invoiceYear.slice(-2);
-            // build number from id to guarantee uniqueness (FAyy-1NNNN where NNNN is padded id)
-            formData.number = `FA${yearShort}-1${String(newId).padStart(4, '0')}`;
+            
+            // Generate year-specific invoice number (FAyy-1NNNN where NNNN increments per year)
+            const regex = new RegExp(`FA${yearShort}-1(\\d{4,})`, 'i');
+            let maxSeq = 0;
+            for (const inv of this.data.invoices || []) {
+                if (!inv || !inv.number) continue;
+                const m = String(inv.number).match(regex);
+                if (m && m[1]) {
+                    const seq = parseInt(m[1], 10);
+                    if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+                }
+            }
+            const nextSeq = maxSeq + 1;
+            formData.number = `FA${yearShort}-1${String(nextSeq).padStart(4, '0')}`;
 
             const newInvoice = {
                 id: newId,
@@ -2562,4 +2587,3 @@ class FreelanceERP {
 
 
 const app = new FreelanceERP();
-
