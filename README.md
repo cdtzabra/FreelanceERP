@@ -4,7 +4,7 @@
 A lightweight Node.js application with an Express backend and a plain JavaScript frontend.  
 It manages clients, invoices, and payments with an embedded SQLite database — no external dependencies required.
 
-**Docker image:** `zabradocker/ferp:1.0.0`  
+**Docker image:** `zabradocker/ferp:1.0.1`  
 **Goal:** simplicity, portability, autonomy.
 
 Designed as a **lightweight alternative** to tools like *Akaunting* or *InvoiceShelf* — ideal for independent IT freelancers who prefer control and speed over complexity.
@@ -21,7 +21,7 @@ Designed as a **lightweight alternative** to tools like *Akaunting* or *InvoiceS
 You can quickly test the app using the published Docker image:
 
 ```bash
-docker run --name ferp -dit -p 3001:3001 zabradocker/ferp:1.0.0
+docker run --name ferp -dit -p 3001:3001 zabradocker/ferp:1.0.1
 ```
 
 Or Or use the provided `docker-compose.yaml`: 
