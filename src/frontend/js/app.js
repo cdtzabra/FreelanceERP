@@ -1775,7 +1775,7 @@ class FreelanceERP {
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="days-worked">Jours travaillés *</label>
-                        <input type="number" id="days-worked" class="form-control" value="${cra ? cra.daysWorked : ''}" min="0" step="0.5" required>
+                        <input type="number" id="days-worked" class="form-control" value="${cra ? cra.daysWorked : ''}" min="0" step="any" required>
                     </div>
                 </div>
                 <div class="form-row full-width">
@@ -1832,7 +1832,7 @@ class FreelanceERP {
         };
 
         if (formData.daysWorked > formData.workingDaysInMonth) {
-            this.showToast('Le nombre de jours travaillés ne peut pas dépasser le nombre de jours ouvrés', 'error');
+            this.showToast('Le nombre de jours travaillés ne peut pas dépasser le nombre de jours ouvrés. Déclarer HNO séparément', 'error');
             return;
         }
 
@@ -2038,7 +2038,7 @@ class FreelanceERP {
                 <div class="form-row">
                     <div class="form-group">
                         <label class="form-label" for="invoice-quantity">Quantité (jours/unités) *</label>
-                        <input type="number" id="invoice-quantity" class="form-control" value="${invoice ? invoice.quantity || 1 : defaultQuantity}" min="0.5" step="0.5" required>
+                        <input type="number" id="invoice-quantity" class="form-control" value="${invoice ? invoice.quantity || 1 : defaultQuantity}" min="0.5" step="any" required>
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="invoice-amount">Montant unitaire HT (€) *</label>
